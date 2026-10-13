@@ -1,12 +1,14 @@
 """Generic MCP tools for searching a facility's bundled documentation guide.
 
-Read-only and based on the pre-built packaged index at
-config.docs_index_dir(facility) (chunks.json + optional embeddings.npy).
-They still require explicit facility configuration: that is the uniform
-contract for every facility-scoped MCP call, and avoids presenting an
-unconfigured facility as ready. Queries use the facility's configured
-embedding infrastructure when available, with automatic fallback to keyword
-search.
+Read-only and needs no SSH access. Uses the pre-built packaged index at
+config.docs_index_dir(facility) (chunks.json + optional embeddings.npy);
+queries are embedded against that facility's configured serving
+infrastructure when available, with automatic fallback to keyword search.
+
+These tools are deliberately *not* behind require_facility_configuration:
+the index ships with the package, so searching a facility's guide is how an
+agent helps someone who has not configured access yet. Gating them made
+the <slug>-reference and <slug>-configuring skills circular.
 
 Per PORTING.md, a chunk only carries a "Source: ..." line when the facility
 registered a docs_cite_url — most facilities leave it blank (no live site
@@ -18,7 +20,7 @@ server/hpc_mcp/docs_server.py imports every facilities/*/facility.py (to
 register them), constructs MCPServer("hpc-docs"), and calls build(mcp) below
 before serve(mcp) — one process, every facility.
 """
-from functools import lru_cache, wraps
+from functools import lru_cache
 
 from hpc_agent_core.mcp_server import MCPServer
 
@@ -43,20 +45,10 @@ def _format(result: dict) -> str:
     return header + f"\n{result['text']}"
 
 
-def _configured_facility_tool(func):
-    """Give docs tools the same configuration-first contract as hpc-mcp."""
-    @wraps(func)
-    def wrapped(facility: str, *args, **kwargs):
-        config.require_facility_configuration(facility)
-        return func(facility, *args, **kwargs)
-    return wrapped
-
-
 def build(mcp: MCPServer) -> MCPServer:
     """Register the docs-search tools on an existing MCPServer instance."""
 
     @mcp.tool()
-    @_configured_facility_tool
     def search_docs(facility: str, query: str, top_k: int = 4) -> str:
         """Search one facility's bundled documentation guide.
 
@@ -98,14 +90,12 @@ def build(mcp: MCPServer) -> MCPServer:
         return sections
 
     @mcp.tool()
-    @_configured_facility_tool
     def list_doc_sections(facility: str) -> str:
         """List every section of a facility's bundled guide (table of
         contents). facility must be one of the slugs from get_facilities()."""
         return "\n".join(f"- {c['breadcrumb']}" for c in _index(facility).chunks)
 
     @mcp.tool()
-    @_configured_facility_tool
     def read_doc_section(facility: str, breadcrumb: str) -> str:
         """Read one section of a facility's guide in full, by its breadcrumb.
 

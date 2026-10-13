@@ -910,16 +910,53 @@ def check_facility(slug: str) -> None:
         _json.loads(_json.dumps(fac.config_example))
 
     def unconfigured_catalog_data_is_readable():
-        """Bundled data remains readable so setup directions can be built.
-
-        It is deliberately not exposed through a facility-scoped MCP call
-        before configuration: get_facilities is the sole no-config entry
-        point for discovering a machine and beginning its setup.
-        """
+        """Bundled data remains readable so setup directions can be built."""
         with no_user_config(slug):
             assert config.load_facts(slug), "get_facility would fail unconfigured"
             assert config.docs_source(slug).exists(), "guide unreadable unconfigured"
             assert fac.display_name and fac.description, "get_facilities would be degraded"
+
+    def unconfigured_tools_still_answer():
+        """The never-fail invariant, at tool granularity: every tool that
+        does not need the cluster must keep working with no config at all,
+        so an agent can orient the user *before* setup.
+
+        Checked through the MCP entry points, not the helpers underneath —
+        the regression this guards against was a decorator applied to the
+        whole tool surface, which the helpers would not have noticed. An
+        earlier version of this file asserted only on config.load_facts()
+        and so passed while get_facility itself was raising.
+        """
+        from hpc_mcp.hpc_server import get_facility, render_job_script
+        from hpc_agent_core import docs_server
+        from hpc_agent_core.models import JobSpec
+
+        with no_user_config(slug):
+            facts = get_facility(slug)
+            assert facts, "get_facility returned nothing unconfigured"
+
+            # Packaged index: searching a guide is how an agent answers
+            # "what partitions does this machine have" before SSH exists.
+            index = docs_server._index(slug)
+            hits = index.search("storage quota partition", top_k=2)
+            assert hits, f"{slug}: docs search returned nothing unconfigured"
+            sections = index.chunks
+            assert sections, f"{slug}: no doc sections unconfigured"
+
+            # Local-only rendering. Supplying an account keeps facilities
+            # that mandate one on the happy path; the point is that nothing
+            # here reaches for a connection.
+            spec = JobSpec.model_validate({
+                "name": "offline-render", "executable": "hostname",
+                "attributes": {"account": "conformance-probe",
+                               "duration": 600},
+            })
+            try:
+                script = render_job_script(slug, spec)
+            except ValueError:
+                pass          # a facility may reject this minimal spec; fine
+            else:
+                assert script.strip(), f"{slug}: empty script unconfigured"
 
     def unconfigured_account_query_returns_setup():
         """Capability errors must not mask the cold-start configuration path."""
@@ -943,6 +980,8 @@ def check_facility(slug: str) -> None:
     check("setup directions are machine-specific and actionable", setup_directions_are_actionable)
     check("bundled catalog data remains readable without user config",
           unconfigured_catalog_data_is_readable)
+    check("no-config tools still answer (never-fail invariant)",
+          unconfigured_tools_still_answer)
     check("unconfigured account query returns setup directions first",
           unconfigured_account_query_returns_setup)
     check("apply_defaults is idempotent", apply_defaults_is_idempotent)
@@ -1416,15 +1455,40 @@ def check_repo() -> None:
             assert "Git-over-SSH authentication failures" in rendered
 
     def every_facility_scoped_mcp_tool_checks_configuration_first():
-        """No facility-specific public verb may bypass the shared guard."""
+        """Every tool that reaches the cluster must check configuration
+        first; every tool that does not must keep working without it.
+
+        Both halves matter. Gating a cluster-bound tool stops it returning
+        a misleading result; gating a packaged-data tool breaks cold start,
+        which is how get_facility and docs search ended up circular with
+        the <slug>-configuring skill they were supposed to support.
+
+        The ungated set is derived from the source and compared against an
+        explicit allowlist, so a new tool added without the guard fails
+        here rather than silently reaching for a connection.
+        """
+        import re
         import hpc_mcp.hpc_server as server
         from hpc_agent_core import docs_server
 
-        # The only intentionally unguarded hpc-mcp tool is get_facilities:
-        # callers need it to discover a facility before configuring one.
+        # Deliberately ungated, each for a stated reason:
+        #   get_facilities    - no facility argument; discovery entry point
+        #   get_facility      - returns this facility's packaged facts JSON
+        #   render_job_script - pure local defaults/validate/render
+        UNGATED = {"get_facilities", "get_facility", "render_job_script"}
+
         source = pathlib.Path(server.__file__).read_text()
-        assert source.count("@mcp.tool()") == source.count(
-            "@_configured_facility_tool") + 1
+        blocks = re.findall(
+            r"@mcp\.tool\(\)\n(.*?)def ([a-zA-Z_][a-zA-Z0-9_]*)\(",
+            source, re.S)
+        assert blocks, "found no @mcp.tool() definitions to inspect"
+        ungated = {name for between, name in blocks
+                   if "@_configured_facility_tool" not in between}
+        assert ungated == UNGATED, (
+            "the set of tools bypassing the configuration guard changed: "
+            f"unexpectedly ungated={sorted(ungated - UNGATED)}, "
+            f"newly gated={sorted(UNGATED - ungated)}"
+        )
 
         class RecordingMCP:
             def __init__(self):
@@ -1442,14 +1506,10 @@ def check_repo() -> None:
 
         for slug in (f.slug for f in config.list_facilities()):
             with no_user_config(slug):
+                # Cluster-bound: must refuse with this facility's directions.
                 for func, args in (
-                    (server.get_facility, (slug,)),
-                    (server.render_job_script, (slug, bare_spec())),
                     (server.fs_ls, (slug,)),
                     (server.get_projects, (slug,)),
-                    (docs_mcp.functions[0], (slug, "queues")),
-                    (docs_mcp.functions[1], (slug,)),
-                    (docs_mcp.functions[2], (slug, "Queues")),
                 ):
                     try:
                         func(*args)
@@ -1458,7 +1518,22 @@ def check_repo() -> None:
                         assert "not configured yet" in text
                         assert f"{slug}-configuring" in text
                     else:
-                        raise AssertionError(f"{func.__name__} bypassed config guard")
+                        raise AssertionError(
+                            f"{func.__name__} bypassed the config guard")
+
+                # Packaged data / local only: must answer anyway. The docs
+                # tools are included here because gating them is the exact
+                # regression this check now guards against.
+                assert server.get_facility(slug)
+                for func, args in (
+                    (docs_mcp.functions[0], (slug, "queues")),
+                    (docs_mcp.functions[1], (slug,)),
+                ):
+                    out = func(*args)
+                    assert out and out.strip(), (
+                        f"{func.__name__} returned nothing for {slug} "
+                        "without user config"
+                    )
 
     check("at least one facility is registered", facilities_exist)
     check("unknown facility errors clearly, listing valid slugs", unknown_facility_errors_clearly)

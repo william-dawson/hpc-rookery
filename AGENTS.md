@@ -170,22 +170,18 @@ HOME=$(mktemp -d) .venv/bin/python tests/notebook_client.py
   **Verified:** a canary file passed to `fs_rm("cell2026", ...)` under
   `CELL2026_HOST=localhost` was really deleted from the local filesystem.
 
-- **The configuration gate also blocks the tools that need no cluster.**
-  A late `unified-hub` change wrapped every facility-scoped tool in
-  `require_facility_configuration`. That is right for anything that opens
-  SSH, but `get_facility` reads a packaged JSON file and the three docs
-  tools read a packaged index; neither can "present an unconfigured
-  facility as ready". Consequences: `tests/notebook_client.py` fails in CI
-  (red for three runs); the `<slug>-reference` skill becomes circular,
-  since its whole job is `search_docs` + `get_facility` and both now demand
-  config a new user does not have; and the conformance check
-  `no-config tools still answer (never-fail invariant)` — added by
-  earlier to guarantee an agent can orient a user *before* setup — was
-  deleted rather than satisfied. Keep the gate on cluster-bound tools, drop
-  it from `get_facility` and the docs tools, and restore the invariant check.
-  **Verified:** against the real MCP server with an empty HOME,
-  `get_facilities` works while `get_facility` and `search_docs` both return
-  "is not configured yet".
+- ~~**The configuration gate also blocks the tools that need no cluster.**~~
+  **Fixed.** `get_facility`, `render_job_script` and the three docs tools
+  no longer carry `@_configured_facility_tool`: the first two are packaged
+  facts and pure local rendering, and the docs tools read a packaged index,
+  so none can "present an unconfigured facility as ready". The never-fail
+  invariant check is restored, now asserted through the MCP entry points
+  rather than the helpers underneath — the earlier version passed while
+  `get_facility` itself was raising. `every_facility_scoped_mcp_tool_checks_
+  configuration_first` now derives the ungated set from the source and
+  compares it against an explicit three-name allowlist, so both halves of
+  the contract are enforced: a cluster-bound tool added without the guard
+  fails, and so does re-gating a packaged-data one.
 
 ### P2
 

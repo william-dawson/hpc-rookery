@@ -96,7 +96,9 @@ def get_facilities() -> list[dict]:
 
 
 @mcp.tool()
-@_configured_facility_tool
+# Not gated: reads this facility's packaged facts JSON and opens no
+# connection, so it must answer before the user has configured SSH —
+# that is how an agent orients someone who has not set up yet.
 def get_facility(facility: str) -> dict:
     """Static facts for one facility: partitions, the resource-limit table,
     storage tiers, modules, and Spack. (IRI: GET /api/v1/facility)
@@ -195,7 +197,9 @@ def get_user_allocations(facility: str, project_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-@_configured_facility_tool
+# Not gated: apply_defaults/validate_spec/render_script are pure local
+# work for every facility (asserted in tests/conformance.py), so this
+# stays useful before SSH is configured.
 def render_job_script(facility: str, spec: JobSpec) -> str:
     """Render the batch script for a JobSpec *without* submitting it, with
     that facility's defaults already applied. Use this to show the user
