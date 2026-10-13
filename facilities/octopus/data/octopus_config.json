@@ -1,0 +1,35 @@
+{
+  "cluster": "octopus",
+  "site": "RIKEN R-CCS",
+  "architecture": "x86_64",
+  "verification": {
+    "source": "Migrated from Octopus-Agent's offline-checked hpc-agent-core port",
+    "hub_port_live_revalidated": false,
+    "note": "No live Octopus SSH access was available. Refresh scheduler, module, and storage facts when access returns."
+  },
+  "scheduler": {
+    "type": "Slurm",
+    "accounting": true,
+    "gpu_request": "--gres=gpu:<count>",
+    "account_required_in_spec": false,
+    "account_note": "Slurm supplies each user's DefaultAccount; configure an override only after querying the user's own associations."
+  },
+  "partitions": [
+    {"name": "h200", "default": true, "gpu_type": "H200", "gpu_vendor": "NVIDIA", "nodes": 3, "max_nodes_per_job_recorded": 1, "gpus_per_node": 8, "cpus_per_node": 192, "memory_mib": 2317610, "max_time": "08:00:00", "container_flag": "--nv"},
+    {"name": "h200-long", "default": false, "gpu_type": "H200", "gpu_vendor": "NVIDIA", "nodes": 3, "max_nodes_per_job_recorded": 1, "gpus_per_node": 8, "cpus_per_node": 192, "memory_mib": 2317610, "max_time": "UNLIMITED", "container_flag": "--nv"},
+    {"name": "mi300x", "default": false, "gpu_type": "MI300X", "gpu_vendor": "AMD", "nodes": 1, "max_nodes_per_job_recorded": 1, "gpus_per_node": 8, "cpus_per_node": 192, "memory_mib": 2317610, "max_time": "08:00:00", "container_flag": "--rocm"},
+    {"name": "mi300x-long", "default": false, "gpu_type": "MI300X", "gpu_vendor": "AMD", "nodes": 1, "max_nodes_per_job_recorded": 1, "gpus_per_node": 8, "cpus_per_node": 192, "memory_mib": 2317610, "max_time": "UNLIMITED", "container_flag": "--rocm"}
+  ],
+  "storage": {
+    "home": "/lustre/home/<user>",
+    "shared": "/lustre",
+    "recorded_total": "493 TB",
+    "node_local_scratch": false
+  },
+  "modules": {
+    "NVIDIA": ["cuda", "nvhpc", "openmpi"],
+    "AMD": ["rocm"],
+    "vendor_neutral": ["singularity", "go"],
+    "note": "Versions change; query module -t avail live. Octopus uses environment-modules rather than Lmod."
+  }
+}

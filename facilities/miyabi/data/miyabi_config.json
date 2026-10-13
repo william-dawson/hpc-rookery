@@ -1,0 +1,90 @@
+{
+  "machine": "Miyabi",
+  "site": "JCAHPC (The University of Tokyo and University of Tsukuba)",
+  "verification": {
+    "source": "Migrated from Miyabi-Agent, whose commands and smoke jobs were live-tested on 2026-07-13",
+    "hub_port_live_revalidated": false,
+    "note": "Current access was unavailable during hub integration. Refresh live values when access returns."
+  },
+  "login": {
+    "hostname": "miyabi-g.jcahpc.jp",
+    "authentication": "One-time code at login. Non-interactive SSH cannot answer it.",
+    "remote_access": "Supported via OpenSSH connection multiplexing: the user opens one authenticated master connection (ssh -MNf <alias>) and later ssh/rsync sessions reuse it with no new prompt. Set ssh.host to that alias.",
+    "on_node_alternative": "ssh.host = localhost when the agent runs on a Miyabi login node.",
+    "note": "A sudden 'Permission denied (keyboard-interactive)' means the master expired; the user re-runs ssh -MNf <alias>. Never ask for the code."
+  },
+  "scheduler": {
+    "type": "PBS Professional",
+    "submission": "qsub",
+    "group_directive": "#PBS -W group_list=<group>",
+    "group_directive_note": "The project group is never hardcoded: set spec.attributes.account, or configure defaults.group in ~/.hpc-agent/miyabi.json (or MIYABI_GROUP).",
+    "queue_required": true,
+    "select_required": true,
+    "account_required": true,
+    "refresh_commands": [
+      "qstat --rsc -x",
+      "qstat --limit",
+      "qstat --rscuse"
+    ]
+  },
+  "systems": {
+    "Miyabi-G": {
+      "nodes": 1120,
+      "cpu": "NVIDIA Grace, 72 cores",
+      "gpu": "NVIDIA H100 96 GB (GH200)",
+      "memory": "120 GB LPDDR5X",
+      "queue_suffix": "-g"
+    },
+    "Miyabi-G-MIG": {
+      "gpu_profile_verified": "2g.24gb",
+      "queue_suffix": "-mig",
+      "note": "node_count/select count means MIG instances"
+    },
+    "Miyabi-C": {
+      "nodes": 190,
+      "cpu": "2 x Intel Xeon Max 9480, 112 cores total",
+      "gpu": null,
+      "memory": "128 GiB",
+      "queue_suffix": "-c"
+    }
+  },
+  "queues": {
+    "Miyabi-G": [
+      "debug-g",
+      "short-g",
+      "regular-g",
+      "interact-g",
+      "coupler-g"
+    ],
+    "Miyabi-G-MIG": [
+      "debug-mig",
+      "short-mig",
+      "regular-mig",
+      "interact-mig"
+    ],
+    "Miyabi-C": [
+      "debug-c",
+      "short-c",
+      "regular-c",
+      "interact-c",
+      "coupler-c"
+    ],
+    "prepost": [
+      "prepost"
+    ],
+    "note": "Do not choose a default across CPU, full-GPU and MIG families. Query live occupancy and limits first."
+  },
+  "storage": {
+    "home": "/home/USER (Lustre; 50 GiB observed in 2026-07)",
+    "project_work": "/work/<group> (Lustre)",
+    "personal_work": "/work/<group>/<username>",
+    "quota_command": "show_quota -g <group> -v",
+    "token_command": "show_token -g <group>"
+  },
+  "modules": {
+    "Miyabi-G": "LNG hierarchy: nvidia/25.9 and nv-hpcx/25.9 were smoke-tested",
+    "Miyabi-C": "MC hierarchy: gcc/11.4.1 and ompi/4.1.6 were smoke-tested",
+    "query_command": "module -t avail",
+    "note": "Versions and hierarchy contents change; query them live."
+  }
+}

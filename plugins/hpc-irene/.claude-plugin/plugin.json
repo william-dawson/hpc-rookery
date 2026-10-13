@@ -1,0 +1,15 @@
+{
+  "name": "hpc-irene",
+  "description": "Facility-specific HPC workflow skills for Irene (CEA TGCC). Install the hpc base plugin first for MCP tools.",
+  "version": "0.1.0",
+  "author": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "repository": "https://github.com/william-dawson/hpc-rookery",
+  "keywords": [
+    "hpc",
+    "irene",
+    "bridge"
+  ]
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "breadcrumb": "Octopus orientation",
+    "url": "",
+    "text": "Octopus is RIKEN R-CCS's small dual-vendor GPU cluster: three NVIDIA H200\nnodes and one AMD MI300X node under Slurm. This guide was migrated from the\nseparate Octopus-Agent repository. That port was checked offline against its\nearlier renderer, but this hub integration could not be exercised on the\nlive cluster. Treat queue, module, and storage values as recorded facts to\nrefresh when access returns.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "Octopus orientation > Connection and accounting",
+    "url": "",
+    "text": "Connect to the management node through the SSH alias or hostname issued for\nyour account. The agent needs non-interactive key authentication; it cannot\nanswer a password prompt. When the agent itself runs on an Octopus front end,\nconfigure `ssh.host` as `localhost`.\n\nSlurm accounting is enabled. Every user has a server-side `DefaultAccount`,\nso most jobs should omit `attributes.account`. Users with several projects\ncan call `get_projects` and select one of their own associations. No real\naccount identifier is bundled here because it would belong to somebody else.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "Octopus orientation > Hardware and partitions",
+    "url": "",
+    "text": "Each node has 192 x86_64 CPU cores, about 2.3 TB of usable memory, and eight\nGPUs. The partition determines the GPU vendor:\n\n| Partition | Nodes in pool | Accelerator | Recorded time limit |\n|---|---:|---|---|\n| `h200` | 3 | NVIDIA H200, 8/node | 8 hours |\n| `h200-long` | 3 | NVIDIA H200, 8/node | unlimited |\n| `mi300x` | 1 | AMD MI300X, 8/node | 8 hours |\n| `mi300x-long` | 1 | AMD MI300X, 8/node | unlimited |\n\nThe `-long` names address the same hardware with a different time policy;\nthey are not separate capacity. The recorded partition inventory limits a\njob to one node. The hub enforces that dated limit until a live Slurm query\nproves it should be widened.\n\nThere is no cross-vendor execution layer. A CUDA build belongs on `h200` or\n`h200-long`; a ROCm build belongs on `mi300x` or `mi300x-long`. Choose the\npartition from the software stack, not merely from current idle capacity.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "Octopus orientation > Job resource shape",
+    "url": "",
+    "text": "GPU requests use untyped, partition-scoped GRES:\n\n```text\n#SBATCH --partition=h200\n#SBATCH --gres=gpu:2\n```\n\nThe partition supplies the type; do not render `gpu:h200` or `gpu:mi300x` in\nthe request. A job may request one through eight GPUs. A partial JobSpec\ndefaults to partition `h200` and one GPU.\n\nThe hub currently accepts one node, up to 192 requested CPU cores, and up to\n2,317,610 MiB of memory. The non-long partitions reject durations beyond\neight hours before submission. These validations come from the bundled\ninventory and need a live refresh if administrators change the partitions.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "Octopus orientation > Modules and containers",
+    "url": "",
+    "text": "Octopus uses Tcl environment-modules, not Lmod. Module contents and versions\nchange, so inspect them live rather than treating this dated inventory as an\ninstallation promise:\n\n- H200 work uses CUDA or NVIDIA HPC SDK; Open MPI is also recorded.\n- MI300X work uses ROCm.\n- Singularity and Go are vendor-neutral entries in the recorded tree.\n\nLoad the matching toolchain in the submitted script. A CUDA binary will not\nbecome a ROCm binary by moving queues, or vice versa.\n\nFor a `JobSpec.container`, the shared Slurm backend selects GPU passthrough\nfrom the partition: `--nv` on H200 and `--rocm` on MI300X. A container that\nstarts but sees no accelerator usually indicates a partition/toolchain or\npassthrough mismatch.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "Octopus orientation > Storage",
+    "url": "",
+    "text": "The recorded storage model is one shared Lustre filesystem rooted at\n`/lustre`, with homes under `/lustre/home/<user>`. There is no recorded\nnode-local scratch tier. Inputs, outputs, and job scripts therefore remain\non the shared filesystem across both GPU pools.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "Octopus orientation > Monitoring and failures",
+    "url": "",
+    "text": "Slurm accounting provides durable history through `sacct`; live wait reasons\ncome from `squeue`, current partition occupancy from `sinfo`, and drained\nnodes from `sinfo -R`. Common signals are:\n\n- `OUT_OF_MEMORY`: reduce memory use or request a larger valid resource\n  share.\n- `TIMEOUT`: reduce the run or move from an eight-hour partition to its\n  matching `-long` partition.\n- CUDA/ROCm library or device errors: confirm the submitted partition matches\n  the workload's build.\n- A container with no visible GPU: inspect the retained script and verify\n  `--nv` versus `--rocm` follows the partition.\n- Account or QOS rejection: query the user's real project associations and\n  allocation rather than guessing another value.\n\nWhen access returns, run the hub doctor, read-only live smoke suite, one tiny\nH200 job, and one tiny MI300X job. Confirm submission, status, output,\naccount omission, GRES allocation, and vendor-specific container rendering.",
+    "id": 6
+  }
+]

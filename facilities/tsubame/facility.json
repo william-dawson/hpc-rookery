@@ -1,0 +1,7 @@
+{
+  "slug": "tsubame",
+  "display_name": "TSUBAME4.0 (Science Tokyo)",
+  "scheduler": "gridengine",
+  "description": "Science Tokyo's GPU-first H100 system, scheduled by Altair Grid Engine using fixed resource-type slices and TSUBAME group points.",
+  "live_validated": false
+}

@@ -1,0 +1,84 @@
+name: CI
+
+# This repository must NEVER publish `hpc_agent_core` to PyPI. The real
+# `hpc-agent-core` library is published from its own repository on a
+# released tag; the copy vendored here is an API-incompatible fork, and
+# shipping it would break everyone depending on the real one. Two
+# deliberate properties keep that impossible:
+#
+#   1. There is no publish workflow in this repository at all. Don't add one.
+#   2. The `permissions:` block below grants ONLY `contents: write`. PyPI
+#      trusted publishing needs `id-token: write`, which is therefore not
+#      available to any step in this workflow even if one tried.
+#
+# The distribution here is also named `hpc-rookery`, not `hpc-agent-core`,
+# so it could not overwrite the published library in any case.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to commit regenerated files back; see note above
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the PR's own branch rather than the merge commit, so
+          # anything generated here can be pushed straight back to it.
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e .
+
+      # The point of the placeholder mechanism. A contributor adds a
+      # facility.json and some skill_notes/, and the boilerplate around them
+      # — the cluster table in the README, one SKILL.md per workflow — is
+      # produced here rather than being something they had to know to run.
+      # Someone adding a machine by telling an agent "read PORTING.md and add
+      # X" shouldn't have the pull request rejected over a script they never
+      # heard of.
+      - name: Fill in the generated files
+        run: |
+          python scripts/render_facility_tables.py
+          python scripts/render_skills.py
+          python scripts/render_plugins.py
+
+      - name: Commit them back
+        run: |
+          if git diff --quiet; then
+            echo "generated files already up to date"
+            exit 0
+          fi
+          git --no-pager diff --stat
+          # A pull request from a fork is checked out from that fork, and
+          # GitHub gives fork PRs a read-only token regardless of the
+          # permissions block above — so the push would fail. Say exactly
+          # what to run instead of failing with a bare permission error.
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "::error::Generated files are out of date, and CI cannot update a fork's branch for you. Run 'python scripts/render_facility_tables.py && python scripts/render_skills.py' and commit the result."
+            exit 1
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "CI: regenerate cluster table and per-cluster skills"
+          git push origin HEAD:"${{ github.event.pull_request.head.ref || github.ref_name }}"
+
+      # Everything below validates the tree as it now stands, including
+      # anything just regenerated.
+      - name: Conformance (every cluster, offline)
+        run: python tests/conformance.py
+      - name: Reproducible notebook client (real MCP stdio, offline)
+        run: python tests/notebook_client.py
+      - name: A built wheel actually contains each cluster's data
+        run: |
+          python -m pip install --quiet build
+          python scripts/check_wheel_data.py

@@ -1,0 +1,50 @@
+[
+  {
+    "breadcrumb": "TGCC Irene",
+    "url": "",
+    "text": "Irene is a CPU-first supercomputer at CEA's TGCC. Its scheduler is Slurm\nunderneath, but users work through TGCC Bridge: batch scripts contain `#MSUB`\ndirectives, `ccc_msub` submits them, and parallel programs launch with\n`ccc_mprun`.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "TGCC Irene > Partitions",
+    "url": "",
+    "text": "The normal target is `rome`, recorded as 2,286 AMD Rome nodes with 128 cores\nand about 228 GiB per node. Use the specialized partitions only when the\nworkload needs them:\n\n| partition | recorded shape | purpose |\n|---|---|---|\n| `rome` | 128 CPU cores/node | ordinary CPU, MPI, and hybrid production |\n| `xlarge` | 112 cores, about 3 TiB, one P100 | single-node large-memory work |\n| `v100` | 40 cores and four V100 GPUs/node | multi-GPU work |\n| `v100l` / `v100l-os` | 36 cores and one V100/node | GPU work with more memory per GPU |\n| `v100xl` | 72 cores, about 2.9 TiB, one V100 | large-memory GPU work |\n\nThese shapes came from the source port and still need a live refresh with\n`ccc_mpinfo`.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "TGCC Irene > Every job needs three site choices",
+    "url": "",
+    "text": "An Irene job must declare:\n\n- `attributes.queue_name`, rendered as `#MSUB -q`; a partial request defaults\n  to `rome`.\n- `attributes.account`, rendered as `#MSUB -A`; use `get_projects` because a\n  project is only valid on the partitions listed by `ccc_compuse`.\n- `attributes.custom_attributes.filesystems`, rendered as `#MSUB -m`.\n  `scratch,work` is the normal default; include `store` only when needed.\n\n`resources.process_count` becomes total tasks (`-n`),\n`cpu_cores_per_process` becomes cores per task (`-c`), `node_count` becomes\n`-N`, and `exclusive_node_use` becomes `-x`. Durations are rendered as total\nseconds for `-T`. Set custom `qos` when the current `ccc_mqinfo` output shows\nthat it is appropriate.\n\nFor a parallel or threaded job, the backend supplies `ccc_mprun` when needed.\nThe submission directory is `${BRIDGE_MSUB_PWD}`. Default output names are\n`irene_<job-id>.o` and `irene_<job-id>.e`.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "TGCC Irene > GPU allocation",
+    "url": "",
+    "text": "Bridge allocates GPUs indirectly through cores per task. The relevant live\nratio is cores per node divided by GPUs per node (`CpN/GpN` in\n`ccc_mpinfo`). A job-total `resources.gpus` can be translated when GPUs divide\nevenly across its tasks; otherwise state `cpu_cores_per_process` explicitly\nafter checking the live ratio. GPU code still launches with `ccc_mprun`.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "TGCC Irene > Projects, status, and accounting",
+    "url": "",
+    "text": "`ccc_compuse` lists project/partition associations and fair-share standing;\nthe backend verifies the chosen combination again immediately before\nsubmission. `ccc_mpp -u $USER` shows live jobs, while `ccc_macct <job-id>`\nprovides finished-job accounting. `ccc_mdel` cancels jobs and `ccc_malter -T`\nchanges a queued or running job's time limit.\n\nTGCC discourages scheduler polling faster than roughly one or two aggregate\nqueries per minute and prohibits `watch` on scheduler commands. Completed jobs\nare therefore queried by ID rather than aggressively polled.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "TGCC Irene > Storage",
+    "url": "",
+    "text": "HOME is small and backed up. SCRATCH is fast Lustre with a purge policy, WORK\nis persistent but not backed up, and STORE is an HSM-backed archive. Bridge's\nmandatory `-m` declaration controls which of these are visible to a job. TMP\nand SHM are allocation-lifetime temporary spaces. Use `ccc_quota` for current\nquotas and `ccc_will_purge` to preview purge candidates.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "TGCC Irene > Software and containers",
+    "url": "",
+    "text": "The `ccc` module supplies the site environment. Data modules define variables\nsuch as `CCCSCRATCHDIR`, `CCCWORKDIR`, and `CCCSTOREDIR`. Open MPI and Wi4MPI\nare the commonly supervised MPI paths; query `module avail` for current\nversions. TGCC containers use pcocc and run in batch as\n`ccc_mprun -C <image> -- <command>`.",
+    "id": 6
+  },
+  {
+    "breadcrumb": "TGCC Irene > Validation status",
+    "url": "",
+    "text": "The separate IreneAgent migration was checked through offline rendering and\nsynthetic parser equivalence, not a live TGCC connection. This hub port also\nhas not submitted a real Irene job. Its SSH/passfile path, current Bridge\noutput, project parser, resource parser, and tiny job workflow must all be\nchecked live before the integration is marked tested.",
+    "id": 7
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "breadcrumb": "TSUBAME4.0",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "TSUBAME4 is Science Tokyo's GPU-first system. Its 240 compute nodes each have\ntwo 96-core AMD EPYC 9654 processors, 768 GiB of memory, four NVIDIA H100 GPUs,\nand local NVMe. It uses Altair Grid Engine.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "TSUBAME4.0 > The important scheduling model",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "TSUBAME jobs are sized by a fixed **resource type**, not by independently\nchoosing nodes, cores, memory, and GPUs. For example, `node_f=2` requests two\nfull units (192 cores and four H100s per unit), while `gpu_1=1` requests one GPU\nwith eight CPU cores and 96 GB. A job uses one resource type throughout.\n\n| type | cores | memory (GB) | GPUs |\n|---|---:|---:|---:|\n| `node_f` | 192 | 768 | 4 |\n| `node_h` | 96 | 384 | 2 |\n| `node_q` | 48 | 192 | 1 |\n| `node_o` | 24 | 96 | 0.5 (MIG) |\n| `gpu_1` | 8 | 96 | 1 |\n| `gpu_h` | 4 | 48 | 0.5 (MIG) |\n| `cpu_160`, `cpu_80`, `cpu_40`, `cpu_16`, `cpu_8`, `cpu_4` | as named | proportional | 0 |\n\nSet the type with `attributes.custom_attributes.resource_type`; it defaults to\n`node_f`. `resources.node_count` is the number of those units. Do not also set\ngeneric GPU or memory fields: the type already fixes them. Wall time is limited\nto 24 hours. Normal jobs leave `queue_name` blank; `prior` is the documented\nsubscription queue.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "TSUBAME4.0 > Groups, points, and trial jobs",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "Normal compute is charged in TSUBAME points to a group supplied to `qsub -g`.\nUse `get_projects` to list the current user's groups and query point balances\nlive because they change. `TSUBAME_GROUP` overrides `defaults.group` in the user\nconfiguration.\n\nNo group means a free trial run: at most two resource units, three minutes, and\npriority `-5`. This is useful for confirming that a program launches. Priorities\n`-4` and `-3` cost more points and require a charged group.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "TSUBAME4.0 > Software and launching",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "Software is provided through environment modules. Query versions live. CUDA and\nthe NVIDIA HPC SDK support GPU work; Intel oneAPI and Open MPI are also common.\nIf a script inherits the submission environment with `-V`, run `module purge`\nbefore loading the job's modules. `LD_LIBRARY_PATH` and `LD_PRELOAD` are not\nforwarded by `-V`, so set them in the script when needed.\n\nThe resource request does not launch MPI for you. Put an explicit matching\nlauncher in `launcher`: Intel MPI commonly uses `mpiexec.hydra -ppn ... -n ...`,\nwhile Open MPI uses `mpirun -npernode ... -n ...`. Set\n`cpu_cores_per_process` so the generated script exports `OMP_NUM_THREADS`, or\nset it explicitly in `environment`.\n\nApptainer jobs automatically bind `/gs`, `/apps`, and `/home`; GPU resource\ntypes also receive `--nv`.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "TSUBAME4.0 > Storage and job output",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "Use `/home/<group>/<user>` for small persistent files and\n`/work/<group>/<user>` for ordinary work. Purchased group storage is under\n`/gs/fs` and `/gs/bs`. `/local` is fast node-local scratch and is erased when\nthe allocation ends, so copy results back before exit.\n\nLive jobs appear in `qstat`; completed records move to `qacct`. Default output\nfiles are normally `<job-name>.o<job-id>` and `<job-name>.e<job-id>` in the\nsubmission directory. Check those, the point balance, resource type, wall-time,\nmodules, and thread count when diagnosing a failure.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "TSUBAME4.0 > Validation status",
+    "url": "https://www.t4.cii.isct.ac.jp/en/",
+    "text": "This unified-hub port was prepared without TSUBAME access. Its dialect comes\nfrom the separate Tsubame4-Agent implementation, but the hub's SSH path,\nscheduler commands, parsers, and tiny job workflow still need fresh live\nvalidation before this integration is marked tested.",
+    "id": 5
+  }
+]

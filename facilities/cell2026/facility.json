@@ -1,0 +1,7 @@
+{
+  "slug": "cell2026",
+  "display_name": "cell2026 (Shinobu Lab)",
+  "scheduler": "gridengine + slurm",
+  "description": "Dual-scheduler GPU cluster: Grid Engine on helix/kinase with managed RTX A4000s and durable qacct, plus no-accounting Slurm on beta/serine with unmanaged RTX 4000 Ada/RTX 5090 GPUs.",
+  "live_validated": false
+}

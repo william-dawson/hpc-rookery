@@ -1,0 +1,56 @@
+[
+  {
+    "breadcrumb": "Miyabi orientation",
+    "url": "",
+    "text": "This is the practical guide for driving JCAHPC Miyabi through the unified HPC\nagent. It was migrated from the separate Miyabi-Agent guide, which was built\nfrom login-node inspection and real smoke jobs on 2026-07-13. The hub port\ncould not be rechecked live because Miyabi access was unavailable. Treat\ndated queue limits and module versions as orientation, then refresh them with\nthe commands below when access returns.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Connection model",
+    "url": "",
+    "text": "Run the agent and MCP processes **on a Miyabi login node**, with:\n\n```json\n{\n  \"ssh\": {\"host\": \"localhost\"},\n  \"defaults\": {\"group\": \"<your-project-group>\"}\n}\n```\n\n`localhost` means direct local execution. It does not start SSH and does not\nbypass Miyabi's interactive two-factor login. Remote SSH automation is not a\nsupported configuration. Every PBS job also needs the user's own project\ngroup; never copy a group identifier from another person's example.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "Miyabi orientation > System shape",
+    "url": "",
+    "text": "Miyabi combines three resource families behind PBS Professional:\n\n| Family | Stable shape | Queue suffix |\n|---|---|---|\n| Miyabi-G | 1,120 GH200 nodes: 72-core NVIDIA Grace CPU plus one 96 GB H100 | `-g` |\n| Miyabi-G MIG | Partitioned H100 service; a `2g.24gb` instance was smoke-tested | `-mig` |\n| Miyabi-C | 190 CPU nodes: two 56-core Intel Xeon Max 9480 CPUs, 128 GiB | `-c` |\n\nThe systems use a 200 Gbps InfiniBand NDR fabric. `/home` and `/work` are\nLustre filesystems. The login node is not a representative compute node: the\ninspected login node had Grace CPUs but no visible H100.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Queues and current limits",
+    "url": "",
+    "text": "Known submission queues are:\n\n- Full GPU: `debug-g`, `short-g`, `regular-g`, `interact-g`, `coupler-g`.\n- MIG: `debug-mig`, `short-mig`, `regular-mig`, `interact-mig`.\n- CPU: `debug-c`, `short-c`, `regular-c`, `interact-c`, `coupler-c`.\n- Pre/post-processing: `prepost`.\n\nThere is no safe default across those families. Before choosing, query live\nstate and the account's current limits:\n\n```sh\nqstat --rsc -x\nqstat --rscuse\nqstat --limit\nqstat --scal\n```\n\nIn the 2026-07 observation, debug queues allowed 30 minutes; short queues\nallowed 8 hours; regular queues generally allowed up to 48 hours, with lower\nlimits at the largest node counts. Those are dated observations, not values\nto hardcode into a new job without checking.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "Miyabi orientation > PBS job shape",
+    "url": "",
+    "text": "Miyabi requires all three of these:\n\n```sh\n#PBS -q <queue>\n#PBS -W group_list=<your-project-group>\n#PBS -l select=<chunks>:mpiprocs=<processes-per-chunk>\n```\n\n`JobSpec.resources.node_count` becomes the PBS select/chunk count.\n`processes_per_node` becomes `mpiprocs`, and `cpu_cores_per_process` becomes\n`ompthreads`. A byte-valued `memory` request is rounded upward to GiB and\nrendered as `mem=<N>gb`. `process_count` is also accepted when it divides\nevenly across the requested chunks.\n\nOn full-GPU queues, each select chunk is one full GPU node. On MIG queues,\neach chunk is one MIG instance. The queue selects the accelerator; there is\nno separate PBS GPU flag. A `resources.gpus` value may be omitted, or must\nequal `node_count` so the specification cannot imply a different allocation.\n\nPBS does not automatically enter the submission directory. Generated scripts\nexplicitly `cd \"$PBS_O_WORKDIR\"`, or enter `spec.directory` when supplied.\nOutput is merged by default and normally appears under the submission\ndirectory with PBS's job-name/job-sequence naming.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Modules and applications",
+    "url": "",
+    "text": "Miyabi's Environment Modules tree is hierarchical and architecture-specific:\n\n- Miyabi-G/login uses the `LNG` hierarchy. The NVIDIA `nvidia/25.9` and\n  `nv-hpcx/25.9` stack was smoke-tested.\n- Miyabi-C uses the `MC` hierarchy. `gcc/11.4.1` and `ompi/4.1.6` were\n  smoke-tested for OpenMP and one-/two-node MPI.\n\n`module avail` is context-sensitive: loading a compiler reveals libraries\nbuilt for it, and loading MPI reveals another layer. A sensible inspection is\n`module purge`, `module avail`, load the parent compiler/toolkit, then run\n`module avail` again. Do not assume a module visible on Miyabi-G exists on\nMiyabi-C. Query versions live rather than freezing the 2026-07 inventory.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Storage, quota, and tokens",
+    "url": "",
+    "text": "- `/home/<user>` is for configuration and small files. The inspected account\n  reported a 50 GiB limit.\n- `/work/<group>` is project work storage.\n- `/work/<group>/<user>` is the natural location for job inputs and outputs.\n\nRefresh account-specific values with:\n\n```sh\nshow_quota -g <your-project-group> -v\nshow_token -g <your-project-group>\n```\n\nThese values are per project and user, so the guide deliberately contains no\nreal group name, balance, or expiry to reuse.",
+    "id": 6
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Monitoring and diagnosis",
+    "url": "",
+    "text": "Useful commands exposed by Miyabi's wrapper layer include:\n\n- `qstat -f <jobid>` for full live job details and exit status once retained.\n- `qstat -H --hday 2 --hnum 100` for short history (at most three days).\n- `qdel <jobid>` to cancel.\n- `tracejob <jobid>` for server, scheduler, and accounting events.\n- `qps <jobid>` and `qsar` for a running job's processes and utilization.\n- `qstat --nodeuse`, `--miguse`, or `--rscuse` for occupancy.\n\nThe compact `qstat -H` history says `FINISH` but does not expose application\nexit status. Treat that as scheduler completion, then inspect output or\n`tracejob` before claiming the application succeeded. `qalter` was not usable\nthrough the site's user wrapper during live inspection; cancel and resubmit\ninstead of assuming a queued job can be edited.",
+    "id": 7
+  },
+  {
+    "breadcrumb": "Miyabi orientation > Evidence from the earlier live port",
+    "url": "",
+    "text": "The separate Miyabi-Agent port completed these small jobs on 2026-07-13:\n\n- Miyabi-C GCC OpenMP with four threads.\n- Miyabi-C Open MPI on one node and across two nodes.\n- A full Miyabi-G GH200 node running a CUDA managed-memory vector addition.\n- One `2g.24gb` MIG instance running the same CUDA test.\n\nThat evidence supports the PBS dialect implemented here. It does not replace\na new hub-level doctor, read-only smoke test, and tiny real job when access is\nrestored.",
+    "id": 8
+  }
+]

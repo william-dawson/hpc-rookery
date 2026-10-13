@@ -1,0 +1,11 @@
+*.egg-info/
+*.pyc
+.claude/
+.pytest_cache/
+.venv/
+__pycache__/
+build/
+dist/
+dist_check/
+remotemanager.log
+uv.lock

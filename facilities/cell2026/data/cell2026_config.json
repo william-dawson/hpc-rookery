@@ -1,0 +1,55 @@
+{
+  "cluster": "cell2026",
+  "architecture": "x86_64 Intel Xeon Gold 6130",
+  "verification": {
+    "source": "Migrated from shinobulab-cell-cluster-mcp; its pre-core implementation was live-tested end-to-end on 2026-06-26",
+    "hub_port_live_revalidated": false,
+    "note": "The later hpc-agent-core migration and this rookery port were checked offline but not rerun live. Both scheduler paths need a fresh smoke test."
+  },
+  "schedulers": [
+    {
+      "name": "gridengine",
+      "hosts": ["helix", "kinase"],
+      "queue": "all.q",
+      "cores_per_host": 32,
+      "memory_per_host_gb": 125,
+      "gpu_model": "NVIDIA RTX A4000",
+      "gpus_per_host": 2,
+      "gpu_request": "-l gpu=N",
+      "gpu_assignment": "$SGE_HGR_gpu translated to CUDA_VISIBLE_DEVICES by the generated script",
+      "history": "durable per-id qacct"
+    },
+    {
+      "name": "slurm",
+      "hosts": ["beta", "serine"],
+      "partition": "all",
+      "cores_per_host": 8,
+      "accounting": false,
+      "gpu_gres": false,
+      "memory_tracking": false,
+      "history": "ephemeral squeue/scontrol only",
+      "nodes": [
+        {"name": "beta", "gpu_model": "NVIDIA RTX 4000 Ada", "gpus": 1},
+        {"name": "serine", "gpu_model": "NVIDIA GeForce RTX 5090", "gpus": 1}
+      ]
+    }
+  ],
+  "routing": {
+    "gridengine_selectors": ["helix", "kinase", "all.q", "gpu"],
+    "slurm_selectors": ["beta", "serine", "all"],
+    "default_scheduler": "gridengine",
+    "host_alias_note": "helix/kinase become all.q plus hostname; beta/serine become all plus nodelist"
+  },
+  "accounts": false,
+  "software": {
+    "module_system": false,
+    "python": "system python3 or user-managed environments",
+    "containers": "Singularity preferred; Docker installed but unsuitable for ordinary multi-user batch work",
+    "note": "Do not emit module load. No cluster-wide conda or uv is guaranteed."
+  },
+  "storage": {
+    "home": "/home/<user> shared NFS for configuration and small scripts",
+    "work": "/work/<user> shared storage for datasets and large output",
+    "recorded_work_total": "182 TB"
+  }
+}

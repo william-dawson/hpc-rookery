@@ -1,0 +1,7 @@
+{
+  "slug": "miyabi",
+  "display_name": "Miyabi (JCAHPC)",
+  "scheduler": "pbs",
+  "description": "JCAHPC CPU/GH200 system with PBS Professional, full-GPU and MIG queues; reached over a multiplexed SSH connection the user authenticates once with a one-time code.",
+  "live_validated": true
+}

@@ -1,0 +1,34 @@
+---
+name: {{SLUG}}-submitting-jobs
+description: Use when the user wants to run, submit, or launch a job on {{DISPLAY_NAME}}. Covers partition/queue selection, JobSpec construction, submission, and known gotchas specific to this facility.
+user-invocable: true
+---
+
+# Submitting jobs on {{DISPLAY_NAME}}
+
+Every tool call in this skill uses `facility="{{SLUG}}"`.
+
+{{FACILITY_NOTES}}
+
+## Universal rules (apply on every facility, not just this one)
+
+- `submit_job(facility="{{SLUG}}", spec=spec)` — **show the user the spec
+  (or a plain-language description of it) before submitting, unless
+  they've explicitly said to just run it.** No exceptions for this call.
+- The returned `{"job_id": ..., "script_path": ...}` — the rendered script
+  is kept on the cluster; `fs_view(facility="{{SLUG}}", path=script_path)`
+  to inspect exactly what was submitted.
+- If a partition/queue/GPU choice isn't given or obvious, check
+  `get_resources(facility="{{SLUG}}")` (live occupancy) and
+  `get_facility(facility="{{SLUG}}")` (static limits) — don't guess.
+- Don't run heavy computation on the login node — submit a job instead.
+- Stage anything the cluster needs (source trees, inputs, uploads, run
+  directories) under `~/agent/work/<descriptive-name>/`, never in the
+  home-directory root. `~/agent/` is the agent's visible scratch area —
+  `~/agent/jobs` already holds every submitted script — and the home
+  root stays the user's own.
+- Don't guess facility-specific details not covered by the notes above —
+  use `search_docs(facility="{{SLUG}}", query=...)` on the `hpc-docs`
+  server. It searches a bundled guide, not a live site — never invent a URL
+  to send the user to.
+- Don't call `cancel_job` without confirming with the user first.

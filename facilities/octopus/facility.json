@@ -1,0 +1,7 @@
+{
+  "slug": "octopus",
+  "display_name": "Octopus (RIKEN R-CCS)",
+  "scheduler": "slurm",
+  "description": "Four-node, dual-vendor GPU cluster: three NVIDIA H200 nodes and one AMD MI300X node, Slurm accounting, and vendor-specific container passthrough.",
+  "live_validated": false
+}

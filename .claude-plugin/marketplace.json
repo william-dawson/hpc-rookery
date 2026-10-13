@@ -1,0 +1,59 @@
+{
+  "name": "hpc-marketplace",
+  "owner": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "plugins": [
+    {
+      "name": "hpc",
+      "source": "./plugins/hpc",
+      "description": "Shared HPC MCP servers and facility discovery. Install only the facility skill packs you use."
+    },
+    {
+      "name": "hpc-cell2026",
+      "source": "./plugins/hpc-cell2026",
+      "description": "Facility-specific HPC workflow skills for cell2026 (Shinobu Lab). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-fugaku",
+      "source": "./plugins/hpc-fugaku",
+      "description": "Facility-specific HPC workflow skills for Fugaku. Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-hokusai",
+      "source": "./plugins/hpc-hokusai",
+      "description": "Facility-specific HPC workflow skills for HOKUSAI BigWaterfall2 (HBW2). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-irene",
+      "source": "./plugins/hpc-irene",
+      "description": "Facility-specific HPC workflow skills for Irene (CEA TGCC). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-miyabi",
+      "source": "./plugins/hpc-miyabi",
+      "description": "Facility-specific HPC workflow skills for Miyabi (JCAHPC). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-octopus",
+      "source": "./plugins/hpc-octopus",
+      "description": "Facility-specific HPC workflow skills for Octopus (RIKEN R-CCS). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-rccs-cloud",
+      "source": "./plugins/hpc-rccs-cloud",
+      "description": "Facility-specific HPC workflow skills for R-CCS Cloud. Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-rikyu",
+      "source": "./plugins/hpc-rikyu",
+      "description": "Facility-specific HPC workflow skills for RIKYU (RIKEN AI4S / GB200). Install the hpc base plugin first for MCP tools."
+    },
+    {
+      "name": "hpc-tsubame",
+      "source": "./plugins/hpc-tsubame",
+      "description": "Facility-specific HPC workflow skills for TSUBAME4.0 (Science Tokyo). Install the hpc base plugin first for MCP tools."
+    }
+  ]
+}

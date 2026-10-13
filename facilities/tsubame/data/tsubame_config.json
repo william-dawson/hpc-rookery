@@ -1,0 +1,53 @@
+{
+  "cluster": "TSUBAME4.0",
+  "operator": "Institute of Science Tokyo",
+  "architecture": "x86_64 AMD EPYC 9654 plus NVIDIA H100",
+  "verification": {
+    "source": "Migrated from the separate Tsubame4-Agent implementation",
+    "hub_port_live_revalidated": false,
+    "note": "The hub port was built without live TSUBAME access. Refresh scheduler output, limits, modules, and storage facts when access returns."
+  },
+  "scheduler": {
+    "type": "Altair Grid Engine",
+    "max_wall_time": "24:00:00",
+    "normal_queue": "leave queue_name blank",
+    "subscription_queue": "prior",
+    "priorities": ["-5", "-4", "-3"],
+    "billing": "qsub -g <group>; no group selects the constrained free trial"
+  },
+  "node": {
+    "count": 240,
+    "cpu": "2 x AMD EPYC 9654",
+    "physical_cores": 192,
+    "memory_gib": 768,
+    "gpu": "4 x NVIDIA H100 SXM5 94GB",
+    "local_nvme_gib": 1660
+  },
+  "resource_types": [
+    {"name": "node_f", "cores": 192, "memory_gb": 768, "gpus": 4, "local_scratch_gib": 1660, "default": true},
+    {"name": "node_h", "cores": 96, "memory_gb": 384, "gpus": 2, "local_scratch_gib": 830},
+    {"name": "node_q", "cores": 48, "memory_gb": 192, "gpus": 1, "local_scratch_gib": 415},
+    {"name": "node_o", "cores": 24, "memory_gb": 96, "gpus": 0.5, "local_scratch_gib": 200, "mig": true},
+    {"name": "gpu_1", "cores": 8, "memory_gb": 96, "gpus": 1, "local_scratch_gib": 200},
+    {"name": "gpu_h", "cores": 4, "memory_gb": 48, "gpus": 0.5, "local_scratch_gib": 100, "mig": true},
+    {"name": "cpu_160", "cores": 160, "memory_gb": 368, "gpus": 0, "local_scratch_gib": 830},
+    {"name": "cpu_80", "cores": 80, "memory_gb": 184, "gpus": 0, "local_scratch_gib": 415},
+    {"name": "cpu_40", "cores": 40, "memory_gb": 92, "gpus": 0, "local_scratch_gib": 200},
+    {"name": "cpu_16", "cores": 16, "memory_gb": 36.8, "gpus": 0, "local_scratch_gib": 83},
+    {"name": "cpu_8", "cores": 8, "memory_gb": 18.4, "gpus": 0, "local_scratch_gib": 40},
+    {"name": "cpu_4", "cores": 4, "memory_gb": 9.2, "gpus": 0, "local_scratch_gib": 20}
+  ],
+  "trial": {"max_resource_units": 2, "max_seconds": 180, "priority": "-5"},
+  "storage": {
+    "home": "/home/<group>/<user> (about 25 GiB)",
+    "work": "/work/<group>/<user> (about 100 GiB)",
+    "high_speed_group": "/gs/fs",
+    "large_scale_group": "/gs/bs",
+    "local_scratch": "/local (job-lifetime node-local NVMe)"
+  },
+  "containers": {
+    "runtime": "Apptainer",
+    "site_binds": ["/gs", "/apps", "/home"],
+    "gpu_flag": "--nv"
+  }
+}

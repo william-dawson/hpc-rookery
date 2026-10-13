@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "hpc": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--quiet",
+        "--from",
+        "git+https://github.com/william-dawson/hpc-rookery.git@main",
+        "hpc-mcp"
+      ],
+      "env": {}
+    },
+    "hpc-docs": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--quiet",
+        "--from",
+        "git+https://github.com/william-dawson/hpc-rookery.git@main",
+        "hpc-docs-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

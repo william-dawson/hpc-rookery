@@ -1,0 +1,132 @@
+{
+  "name": "hpc-marketplace",
+  "interface": {
+    "displayName": "HPC Agent Hub"
+  },
+  "owner": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "plugins": [
+    {
+      "name": "hpc",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-cell2026",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-cell2026"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-fugaku",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-fugaku"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-hokusai",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-hokusai"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-irene",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-irene"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-miyabi",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-miyabi"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-octopus",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-octopus"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-rccs-cloud",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-rccs-cloud"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-rikyu",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-rikyu"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "hpc-tsubame",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-tsubame"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

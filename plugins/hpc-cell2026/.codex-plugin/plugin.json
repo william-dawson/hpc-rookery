@@ -1,0 +1,30 @@
+{
+  "name": "hpc-cell2026",
+  "version": "0.1.0",
+  "description": "Facility-specific HPC workflow skills for cell2026 (Shinobu Lab). Install the hpc base plugin first for MCP tools.",
+  "author": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "repository": "https://github.com/william-dawson/hpc-rookery",
+  "keywords": [
+    "hpc",
+    "cell2026",
+    "gridengine + slurm"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HPC \u2014 cell2026 (Shinobu Lab)",
+    "shortDescription": "Workflow skills for cell2026 (Shinobu Lab).",
+    "longDescription": "Adds only the configuration, reference, submission, monitoring, demo, and reproducibility skills for cell2026 (Shinobu Lab). Requires the hpc base plugin for its MCP servers.",
+    "developerName": "William Dawson",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Show me how to configure access to cell2026 (Shinobu Lab).",
+      "Help me submit a job on cell2026 (Shinobu Lab)."
+    ]
+  }
+}

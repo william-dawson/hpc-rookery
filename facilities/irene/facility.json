@@ -1,0 +1,7 @@
+{
+  "slug": "irene",
+  "display_name": "Irene (CEA TGCC)",
+  "scheduler": "bridge",
+  "description": "CEA TGCC CPU-first system with AMD Rome, large-memory, and NVIDIA GPU partitions, accessed through the Bridge #MSUB/ccc_* scheduler interface.",
+  "live_validated": false
+}

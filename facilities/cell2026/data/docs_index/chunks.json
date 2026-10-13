@@ -1,0 +1,44 @@
+[
+  {
+    "breadcrumb": "cell2026",
+    "url": "",
+    "text": "cell2026 is a small GPU cluster with two schedulers operating side by side.\nGrid Engine manages `helix` and `kinase`; Slurm manages `beta` and `serine`.\nThis is not merely two syntaxes for the same queue: GPU assignment and job\nhistory differ materially between them.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "cell2026 > Choosing a side",
+    "url": "",
+    "text": "| selector | scheduler and real queue | CPU | GPU | history |\n|---|---|---:|---|---|\n| `helix` | Grid Engine `all.q`, pinned to helix | 32 cores | 2 × RTX A4000 | durable per-ID `qacct` |\n| `kinase` | Grid Engine `all.q`, pinned to kinase | 32 cores | 2 × RTX A4000 | durable per-ID `qacct` |\n| `all.q` / `gpu` | Grid Engine `all.q`, either host | 32 cores/host | 2 × RTX A4000/host | durable |\n| `beta` | Slurm `all`, `--nodelist=beta` | 8 cores | 1 × RTX 4000 Ada | ephemeral |\n| `serine` | Slurm `all`, `--nodelist=serine` | 8 cores | 1 × RTX 5090 | ephemeral |\n| `all` | Slurm `all`, either host | 8 cores/host | one unmanaged GPU/host | ephemeral |\n\nWith no selector, the hub uses Grid Engine `all.q`. An explicit\n`attributes.scheduler` can select Slurm or Grid Engine, but it must agree with\nany queue selector.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "cell2026 > Grid Engine GPUs",
+    "url": "",
+    "text": "Set job-total `resources.gpus` to 1 or 2. Grid Engine renders `-l gpu=N` and\nallocates RSMAP device indexes through `$SGE_HGR_gpu`. The scheduler does not\nset `CUDA_VISIBLE_DEVICES` or provide cgroup isolation, so the generated script\ntranslates the assigned indexes itself:\n\n```bash\nexport CUDA_VISIBLE_DEVICES=\"$(echo \"$SGE_HGR_gpu\" | tr ' ' ',')\"\n```\n\nDo not override this environment variable in the JobSpec. `helix` and\n`kinase` have 32 cores each. Choose the Grid Engine parallel environment with\n`attributes.parallel_env`: recorded choices include `smp`, `OpenMP`, and the\n`mpi` family. The recorded wall-time ceiling is five days.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "cell2026 > Slurm GPUs",
+    "url": "",
+    "text": "Slurm has no GPU GRES and rejects `--gres=gpu:N`. It also has unusable memory\ntracking (`RealMemory=1`), so the backend emits neither GPU nor memory flags.\nThe single GPU is visible to every job placed on that host and is not reserved\nor isolated. On a container job, `resources.gpus=1` only enables Singularity\n`--nv`; users still need to coordinate GPU use. Use `beta` or `serine` when a\nspecific GPU generation is required.\n\nSlurm accounting is disabled. Live jobs appear in `squeue`, and a completed\njob remains in `scontrol` only briefly before its status disappears. Save\nstdout and stderr under `/work` when a durable record matters.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "cell2026 > Job IDs and recent status",
+    "url": "",
+    "text": "The two schedulers can issue overlapping numeric IDs. After submission, the\nhub records the ID-to-scheduler mapping locally under\n`~/.hpc-agent/cell2026-registry/`. This registry is a routing and recency index,\nnot scheduler accounting. A missing entry makes status and cancellation query\nboth schedulers; a collision is reported as ambiguous rather than guessed.\n\nGrid Engine's `qacct -o $USER -d N` on this installation returns an owner\nsummary, not per-job history, although `qacct -j <id>` is durable. The local\nregistry is therefore necessary to find recently submitted IDs after they\nleave the live queues.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "cell2026 > Software and storage",
+    "url": "",
+    "text": "There is no environment module system. Use binaries already on `PATH`, a\nuser-installed virtual/conda environment, or a container. Singularity is the\npreferred batch runtime and receives `--nv` for GPU-enabled container jobs.\nDocker is installed but is not the normal multi-user batch path.\n\nKeep small scripts and environment definitions under shared `/home`; use\n`/work` for datasets, checkpoints, and large outputs. No project/account is\nrequired on either scheduler.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "cell2026 > Validation status",
+    "url": "",
+    "text": "The original dual-scheduler implementation was exercised live on 2026-06-26:\na Slurm CPU job and Grid Engine GPU job completed, output was confirmed, the\nGPU device translation worked, qacct history persisted, and registry routing\ndistinguished the jobs. The later core migration and this hub integration were\nnot rerun live. Treat those earlier results as strong evidence, but keep this\nport in awaiting-live-validation until both current scheduler paths pass again.",
+    "id": 6
+  }
+]

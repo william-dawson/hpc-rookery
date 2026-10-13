@@ -1,0 +1,30 @@
+{
+  "name": "hpc-tsubame",
+  "version": "0.1.0",
+  "description": "Facility-specific HPC workflow skills for TSUBAME4.0 (Science Tokyo). Install the hpc base plugin first for MCP tools.",
+  "author": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "repository": "https://github.com/william-dawson/hpc-rookery",
+  "keywords": [
+    "hpc",
+    "tsubame",
+    "gridengine"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HPC \u2014 TSUBAME4.0 (Science Tokyo)",
+    "shortDescription": "Workflow skills for TSUBAME4.0 (Science Tokyo).",
+    "longDescription": "Adds only the configuration, reference, submission, monitoring, demo, and reproducibility skills for TSUBAME4.0 (Science Tokyo). Requires the hpc base plugin for its MCP servers.",
+    "developerName": "William Dawson",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Show me how to configure access to TSUBAME4.0 (Science Tokyo).",
+      "Help me submit a job on TSUBAME4.0 (Science Tokyo)."
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "cluster": "Irene (Joliot-Curie at TGCC)",
+  "operator": "CEA TGCC",
+  "architecture": "CPU-first heterogeneous x86_64 system",
+  "verification": {
+    "source": "Migrated from IreneAgent's offline behavioral-equivalence port",
+    "hub_port_live_revalidated": false,
+    "note": "No live TGCC access was available. Refresh ccc_mpinfo, ccc_compuse, QoS, modules, and storage policy before marking this port live-tested."
+  },
+  "scheduler": {
+    "type": "TGCC Bridge over Slurm",
+    "script_directive": "#MSUB",
+    "submit": "ccc_msub",
+    "launcher": "ccc_mprun",
+    "required": ["partition (-q)", "project (-A)", "filesystems (-m)"]
+  },
+  "partitions": [
+    {"name": "rome", "default": true, "nodes": 2286, "cores_per_node": 128, "memory_per_node_gib": 228, "gpu": false, "role": "regular CPU and MPI production"},
+    {"name": "xlarge", "default": false, "nodes": 5, "cores_per_node": 112, "memory_per_node_tib": 3, "gpus_per_node": 1, "gpu_type": "NVIDIA P100", "single_node_jobs": true, "role": "large shared-memory work"},
+    {"name": "v100", "default": false, "nodes": 32, "cores_per_node": 40, "memory_per_node_gib": 175, "gpus_per_node": 4, "gpu_type": "NVIDIA V100"},
+    {"name": "v100l", "default": false, "nodes": 30, "cores_per_node": 36, "memory_per_node_gib": 355, "gpus_per_node": 1, "gpu_type": "NVIDIA V100"},
+    {"name": "v100l-os", "default": false, "nodes": 30, "cores_per_node": 36, "gpus_per_node": 1, "gpu_type": "NVIDIA V100", "note": "OpenStack/OS partition recorded by the source port"},
+    {"name": "v100xl", "default": false, "nodes": 2, "cores_per_node": 72, "memory_per_node_tib": 2.9, "gpus_per_node": 1, "gpu_type": "NVIDIA V100"}
+  ],
+  "qos": {
+    "normal": "normal production QoS",
+    "test": "short development QoS",
+    "long": "longer jobs; verify current limits with ccc_mqinfo"
+  },
+  "storage": {
+    "home": "$HOME / $OWN_HOME (small NFS area, backed up)",
+    "scratch": "$CCCSCRATCHDIR (fast Lustre, purge policy applies)",
+    "work": "$CCCWORKDIR (persistent Lustre, not backed up)",
+    "store": "$CCCSTOREDIR (Lustre plus HSM archive)",
+    "tmp": "$CCCTMPDIR (job-local temporary storage)",
+    "shm": "$CCCSHMDIR (job-lifetime tmpfs)",
+    "quota_command": "ccc_quota",
+    "purge_preview_command": "ccc_will_purge"
+  },
+  "modules": {
+    "site": ["ccc", "datadir/own", "dfldatadir/own"],
+    "mpi": ["mpi/openmpi", "mpi/intelmpi", "mpi/wi4mpi"],
+    "gpu": ["nvhpc"],
+    "numerical": ["mkl", "scalapack", "fftw3/gnu", "fftw3/mkl"],
+    "note": "Versions change; query module avail live."
+  },
+  "containers": "pcocc images launched in jobs with ccc_mprun -C <image> -- <command>",
+  "polling_policy": "Do not use watch on scheduler commands; keep aggregate scheduler queries to roughly one or two per minute."
+}
