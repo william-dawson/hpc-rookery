@@ -1,6 +1,6 @@
 {
   "name": "hpc-rikyu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Facility-specific HPC workflow skills for RIKYU (RIKEN AI4S / GB200). Install the hpc base plugin first for MCP tools.",
   "author": {
     "name": "William Dawson",

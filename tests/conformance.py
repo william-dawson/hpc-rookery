@@ -1334,7 +1334,16 @@ def check_repo() -> None:
             "the cached docs index captured an embedding client/API key"
         )
         token = object()
-        with patch.object(index, "_vector_search", return_value=[]) as vector:
+        # search() only reaches the vector path when embeddings are loaded.
+        # A facility may legitimately ship BM25-only (no embeddings.npy, e.g.
+        # after a guide edit made while the embedding endpoint was down), so
+        # stand in a matrix rather than depending on what happens to be
+        # committed — the invariant under test is that the client is passed
+        # per call and never cached on the index.
+        import numpy as _np
+        with patch.object(index, "_embeddings",
+                          _np.zeros((len(index.chunks), 4), dtype="float32")), \
+                patch.object(index, "_vector_search", return_value=[]) as vector:
             index.search("anything", embed_client=token)
         vector.assert_called_once_with("anything", 5, token)
 

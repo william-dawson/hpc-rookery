@@ -94,6 +94,21 @@ bootstrap.)
 - Don't submit an MPI job without setting `resources.processes_per_node` —
   `mpirun` will fail with "not enough slots" even though the job runs fine.
 
+## Always set the project account
+
+Put `"account": "<project>"` in `attributes` on every job. RIKYU rejects a
+job from a multi-project user that omits it:
+
+> `[AI4S] You belong to multiple projects, so the project to be charged
+> must be specified explicitly.`
+
+It is optional only for someone in exactly one project, and harmless there,
+so set it unconditionally instead of deciding. `get_projects(facility="rikyu")`
+lists the user's projects (the `rkp*` groups); if they have several and
+haven't said which to charge, ask rather than picking one — it is a billing
+decision at 300 yen/GPU-hour. `RIKYU_ACCOUNT` or `defaults.account` in
+`~/.hpc-agent/rikyu.json` supplies it automatically when set.
+
 ## Universal rules (apply on every facility, not just this one)
 
 - `submit_job(facility="rikyu", spec=spec)` — **show the user the spec
