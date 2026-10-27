@@ -1,0 +1,80 @@
+[
+  {
+    "breadcrumb": "ROQUO Orientation Guide",
+    "url": "",
+    "text": "ROQUO is a RIKEN Center for Computational Science (R-CCS) GPU\nsupercomputer built around NVIDIA GB200 nodes, scheduled by Slurm.\n\n**Provenance:** written from the operator's online manual, then checked\nagainst the live system on 2026-10-27. Verified there: SSH, Slurm 26.05.3,\nboth partitions and their node counts, the QOS policy, and that a rendered\nscript is accepted by `sbatch`. Not verified: a job running to completion —\nthe project available for testing had zero billing points. Where the manual\nand the live system disagreed, this follows the live system and says so.\nQuotas remain unverified (the manual marks them TBD), so read those live.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > The one thing to get right first",
+    "url": "",
+    "text": "**Login nodes are x86_64. Compute nodes are aarch64.** Anything you build\non a login node will not run on a compute node. Build on a compute node,\nin an interactive job, or in a batch job. This is the mistake that costs\nthe most time here, because the failure appears much later than the cause.\n\nThe same split applies to containers: images must be aarch64-compatible,\nand an x86_64 image simply won't run. It also applies to the `work`\npartition, which is x86_64 — binaries built there don't run on `roquo`.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Getting in",
+    "url": "",
+    "text": "SSH to `login.roquo.qc.r-ccs.riken.jp`, which is an alias for `login1`,\n`login2` and `login3` (each reachable directly as\n`loginN.roquo.qc.r-ccs.riken.jp`).\n\nRegister your public key yourself in the ROQUO Portal\n(`https://portal.roquo.qc.r-ccs.riken.jp/`) under **SSH Keys**: paste the\ncontents of your `.pub` file and press Add. Keys are listed by the comment\nat the end of the public key. Never paste a private key. If that screen\nsays keys can't be changed there, administrators manage them for your\naccount and you file a portal ticket instead.\n\nThe portal is also where you see your username, UID, groups and which of\nthem are billing groups, request storage quota changes, and issue API\ntokens. Most profile fields need a ticket to change; your login shell is\nthe exception.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Slurm",
+    "url": "",
+    "text": "Two partitions, and they are genuinely different machines:\n\n- **`roquo`** — the default. 135 GB200 GPU nodes, aarch64, in eight racks\n  (`qr01`–`qr08`), nodes named like `qr01n01`. No node-count cap under the\n  normal QOS (the manual's \"36 nodes per job\" is the `general` QOS's limit,\n  and `general` isn't allowed on this partition).\n- **`work`** — five CPU-only x86_64 nodes (`work01`–`work05`), AMD EPYC\n  9655 with 192 logical CPUs and about 1510 GiB usable each. No GPUs. For\n  builds, pre/post-processing, workflow servers, and VS Code Remote.\n\nPer-rack partitions `roquo-rack01`–`roquo-rack08` were removed on\n2026-10-13. If you find them in an old script, delete them and use\n`--switches=1` instead to keep an allocation inside one rack (it waits up\nto five minutes before spanning racks; `--switches=1@<time>` shortens\nthat).\n\n**Always set `--account=<project>`.** It chooses both what gets billed and\nwhich group owns the files the job writes. Leaving it out doesn't fail the\njob — it falls back to a restrictive default account, which is worse,\nbecause the job runs and behaves strangely instead of stopping. List what\nyou can charge with `sacctmgr -nP show assoc user=$USER format=Account`.\n\n**Always set `--time`.** The default is one hour on both partitions, which\nis rarely what you meant.\n\nStandard `sbatch` / `squeue --me` / `salloc` / `srun` / `scancel` /\n`sinfo` all work as expected, and accounting is available, so\n`sacct -j <jobid> -o JobID,State,ExitCode,Elapsed,MaxRSS` gives you job\nhistory rather than just the live queue.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Asking for GPUs",
+    "url": "",
+    "text": "Use `--gres=gpu:N` with N from 1 to 4 — this is the per-node `gres`\ndialect, not the job-total `--gpus=N` that some other RIKEN machines use.\n\nA GPU request rounds up to one of three fixed node plans:\n\n| Plan | GPUs | CPU cores | Memory |\n|---|---|---|---|\n| qtr | 1 | 36 | 400 GB |\n| half | 2 | 72 | 800 GB |\n| full | 4 | 144 | 1600 GB |\n\nA job that names no GPU, CPU or memory flags gets the `qtr` plan.\n\nAsking for more than one node's worth in a single `--gres` request is\nrejected outright with `ROQUO-E001`. For multiple nodes, combine\n`--gres=gpu:4` with `--nodes=N` — and for tightly coupled multi-node work\nyou want whole nodes anyway, since each GPU has its own directly attached\nNIC and asking for fewer GPUs means less bandwidth.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Wall time and QOS",
+    "url": "",
+    "text": "QOS trades wall time for priority, and which ones a partition accepts is\nnot what the manual implies. From the live scheduler:\n\n| Partition | Accepts | Partition's own MaxTime |\n|---|---|---|\n| `roquo` | `normal`, `p1`, `p2`, `p3`, `p4`, `p5` | 3 days |\n| `work` | `normal`, `long`, `p4`, `p5` | 30 days |\n\nCeilings per QOS: `normal` 3 days, `p1` 2 days, `p2` 1 day, `p3` 12 hours,\n`long` 30 days. `p4` and `p5` have no ceiling of their own, so only the\npartition's MaxTime bounds them. A `general` QOS also exists but isn't\naccepted by either partition, so you can't use it here. `p3` additionally\nallows only one job at a time per user.\n\n**The trap, and it is not only on `work`.** Exceeding the *QOS* ceiling\nwhile still inside the *partition's* MaxTime is accepted by Slurm and then\nnever scheduled — the job parks on `QOSMaxWallDurationPerJobLimit`, which\nlooks exactly like waiting for a busy queue. That's any `work` job over 3\ndays without `--qos=long`, and equally any `roquo` job over its `p1`/`p2`/\n`p3` ceiling. Going over the *partition's* MaxTime is the safe case: Slurm\nrefuses it at submit with a clear message.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > The work partition's own rules",
+    "url": "",
+    "text": "You must give a CPU count — `--cpus-per-task` or `--ntasks`, from 1 to 192\n(`ROQUO-E101` if you forget, `ROQUO-E102` if you overshoot). Memory is\n8 GiB per allocated CPU by default and also capped there, so `--mem` can\ngo down but not above CPUs × 8 GiB (`ROQUO-E103`). Jobs share nodes, so\nyou get only what you allocated.\n\nFor VS Code Remote: you can only SSH to a work node while your own job is\nrunning on it. The documented setup puts a `ProxyCommand` in your local\n`~/.ssh/config` that runs `srun` on the login node and relays through\n`socat` to the node's sshd, so connecting allocates a node and\ndisconnecting releases it. `socat` is already installed there. The\nconnection drops when `--time` runs out.",
+    "id": 6
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Storage",
+    "url": "",
+    "text": "- **Home** (`/home/hps1/<username>`) — small; configuration and source\n  only. Check with `lfs quota -h -u $USER /home/hps1`.\n- **Project** (`/projects/hps1/<project>`, Lustre) — persistent and shared\n  with your project. Datasets, results and SIF images belong here. Check\n  with `lfs df -h /projects/hps1`. Quota changes go through the portal and\n  need a stated reason.\n- **Scratch** (`/scratch/<jobid>`, also `$SLURM_SCRATCH`) — node-local\n  NVMe, visible only to that job, deleted the moment it ends. Copy\n  anything you want to keep before the job exits.\n\nInside a job `$TMPDIR` points at `$SLURM_SCRATCH/tmp`. Don't write to\n`/tmp` directly.\n\nThe manual does not publish actual quota figures — they're marked TBD — so\nread them live rather than assuming.",
+    "id": 7
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Modules",
+    "url": "",
+    "text": "Lmod, with the usual `module avail` / `load` / `list` / `unload` / `purge`\n/ `spider`.\n\n**Modules load on compute nodes only, not on login nodes.** A `module\nload` in a login shell won't behave the way it does inside a job.\n\nAvailable: `gcc/14`, `cuda/13.3`, `hpcx/2.50` (and `2.51`), `nvhpc/26.9`,\n`nvhpc-openmpi/26.5`. Note that bare `module load cuda` resolves to\n`cuda/13.4`, which is the default — not `13.3`, which you have to name.",
+    "id": 8
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > MPI",
+    "url": "",
+    "text": "Two stacks, and Lmod treats them as mutually exclusive — loading one swaps\nthe other out:\n\n- **`hpcx/2.50`** (OpenMPI 5 over UCX) — launch with **`srun`**.\n- **`gcc/14` + `nvhpc/26.5` + `nvhpc-openmpi/26.5`** (OpenMPI 4 over UCX),\n  for NVHPC compilers and CUDA-aware MPI — launch with **`mpirun`**.\n  `srun --mpi=pmix` aborts before `MPI_Init` on this stack and is\n  unsupported.\n\nCompiling for the GPUs means Blackwell: compute capability 10.0, so\n`-arch=sm_100` for `nvcc` or `-gpu=cc100` for NVHPC.\n\nKnown sharp edges, all of which produce confusing failures:\n\n- Plain `-lmpi` fails with \"cannot find -lmpi\". Pass MPI include and\n  library paths explicitly.\n- `mpicc -cuda` doesn't work, due to a CUDA 13.2 device-header conflict.\n  Compile with `nvcc` using `nvc++` as the host compiler, or use `nvc++`\n  directly.\n- Don't load the `cuda` module or set `NVHPC_CUDA_HOME` alongside the\n  NVHPC stack — it breaks `mpirun`.\n- Call `cudaSetDevice()` and `cudaFree(0)` **before** `MPI_Init`, or the\n  job aborts with \"cannot find remote protocol\".\n- Slurm's TaskProlog injects the UCX settings CUDA-aware MPI needs. Don't\n  unset them.\n- NVSHMEM applications (HPL in the hpc-benchmarks container, for instance)\n  need `NVSHMEM_IBGDA_NIC_HANDLER=cpu_host_memory` or they can hang after\n  `cuda_nvshmem_init`. Ordinary CUDA-aware MPI doesn't need it.\n\nFor reference, the manual reports about 93 GB/s for one GPU pair at 16 MB,\nand about 378 GB/s aggregate across two nodes of four GPUs at 32 MB.",
+    "id": 9
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Containers",
+    "url": "",
+    "text": "Two runtimes. Pyxis/Enroot pulls and runs in one step:\n\n    srun --container-image=nvcr.io#nvidia/<image:tag> \\\n         --container-mounts=<host>:<container> <cmd>\n\nApptainer runs a local SIF:\n\n    apptainer exec --nv <image.sif> <cmd>\n\nKeep images under `/projects/hps1/<project>`, and remember they must be\naarch64.",
+    "id": 10
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Reading sbatch's output",
+    "url": "",
+    "text": "Two things make ROQUO's `sbatch` messages easy to misread.\n\n**Every line is bilingual** — Japanese first, then the same message in\nEnglish, both carrying the same `ROQUO-nnn` code. Match on the code, not\nthe text.\n\n**Warnings are printed as errors.** A line reading\n`sbatch: error: [ROQUO-W003] …` is a *warning* (note the `W`): it means\nyour request was rounded up to a node plan, which is normal and expected.\nJudge success by sbatch's exit status and whether a job ID came back, not\nby whether the word \"error\" appears.",
+    "id": 11
+  },
+  {
+    "breadcrumb": "ROQUO Orientation Guide > Common failure modes",
+    "url": "",
+    "text": "- **A binary works on the login node and dies on a compute node** — it was\n  built for x86_64. Rebuild on a compute node. Same cause if something\n  built on `work` fails on `roquo`.\n- **`ROQUO-E001`** — the request exceeds one node. Use `--gres=gpu:4`\n  with `--nodes=N`.\n- **`ROQUO-E101` / `E102` / `E103`** — on `work`: no CPU count, too many\n  CPUs (max 192), or more memory than 8 GiB × CPUs.\n- **A `work` job sits queued forever with `QOSMaxWallDurationPerJobLimit`**\n  — more than 3 days without `--qos=long`. Nothing rejected it at submit\n  time.\n- **An MPI job aborts before `MPI_Init`** — `srun --mpi=pmix` on the NVHPC\n  stack. Use `mpirun`, or switch to `hpcx` and use `srun`.\n- **\"cannot find remote protocol\"** — CUDA wasn't initialized before\n  `MPI_Init`.\n- **\"cannot find -lmpi\"** — MPI paths weren't passed explicitly.\n- **Email notifications never arrive** — `--mail-user` needs a full\n  address containing `@`, and `--mail-type` must be set too. A bare\n  username silently sends nothing.\n- **`module load` seems to do nothing** — you're on a login node. Modules\n  only load on compute nodes.\n- **A job writes files the rest of the project can't read** — it ran\n  without `--account`, so a restrictive default owned the output.\n- **`ROQUO-E202`, \"Jobs cannot be submitted with a personal account\"** —\n  you charged the account named after your username. `sacctmgr` lists it\n  next to your real billing group, but it cannot be charged. Use the\n  `qc-prj-*` group; `get_projects` marks which entries are chargeable.\n- **`ROQUO-E201`, \"Not enough billing points\"** — the charging group is out\n  of points. sbatch then ends with the unhelpful `Batch job submission\n  failed: Unspecified error`, so read the whole message, not the last line.\n  There's no command for the balance — it's in the Portal — and the fix is\n  to have administrators add points, or to charge a different project.\n- **`ROQUO-W003`** — not a failure at all; see \"Reading sbatch's output\".",
+    "id": 12
+  }
+]

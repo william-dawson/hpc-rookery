@@ -51,6 +51,11 @@
       "description": "Facility-specific HPC workflow skills for RIKYU (RIKEN AI4S / GB200). Install the hpc base plugin first for MCP tools."
     },
     {
+      "name": "hpc-roquo",
+      "source": "./plugins/hpc-roquo",
+      "description": "Facility-specific HPC workflow skills for ROQUO (RIKEN R-CCS). Install the hpc base plugin first for MCP tools."
+    },
+    {
       "name": "hpc-tsubame",
       "source": "./plugins/hpc-tsubame",
       "description": "Facility-specific HPC workflow skills for TSUBAME4.0 (Science Tokyo). Install the hpc base plugin first for MCP tools."

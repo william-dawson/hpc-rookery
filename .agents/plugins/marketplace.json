@@ -117,6 +117,18 @@
       "category": "Productivity"
     },
     {
+      "name": "hpc-roquo",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-roquo"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "hpc-tsubame",
       "source": {
         "source": "local",
