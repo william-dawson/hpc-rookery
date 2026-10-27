@@ -331,12 +331,19 @@ What not to put there: anything generic (the config file's location, how to
 verify, the skill name) is already supplied around your text. Keep it to
 what only you know.
 
-`get_facilities` is the one intentional no-config entry point: an agent
-uses it to discover a slug before setup. Every facility-scoped MCP tool,
-including static facts and documentation, checks for explicit local
-configuration first; otherwise it returns these setup directions. This
-prevents a bundled default host from making an unconfigured facility look
-available.
+Which tools need configuration, and which don't. Any tool that reaches
+the cluster checks for explicit local configuration first and otherwise
+returns these setup directions, so a bundled `default_host` can't make an
+unconfigured facility look available. The tools that open no connection
+deliberately answer anyway: `get_facilities`, `get_facility` (your
+packaged facts JSON), `render_job_script` (pure local defaults, validate
+and render), and the three docs tools (your packaged index). That is what
+lets an agent answer "what partitions does this machine have" and walk a
+user through setup *before* they have access — gating those made the
+`<slug>-reference` and `<slug>-configuring` skills circular. If you add a
+tool, `tests/conformance.py` checks it against an explicit allowlist of
+those ungated names, so a cluster-bound tool that skips the guard fails
+there.
 
 ## 6. Wire up `facility.py` — the scheduler backend
 

@@ -61,8 +61,27 @@ async def read_only_tier(hpc, docs_hpc) -> list[str]:
     assert slugs, "no facilities registered"
     print(f"\nfacilities: {slugs}")
 
+    skipped: list[tuple[str, str]] = []
     for slug in slugs:
-        res = await hpc.get_resources(facility=slug)
+        # No one person has access to every machine in this repo, so an
+        # unreachable facility is an expected condition, not a failure: skip
+        # it with a reported reason instead of aborting the whole run and
+        # taking every later facility (and the --job tier) down with it.
+        # Only a connection/configuration problem is skippable — anything
+        # else still fails, or this would hide real breakage.
+        try:
+            res = await hpc.get_resources(facility=slug)
+        except Exception as exc:
+            reason = str(exc)
+            unreachable = ("is not configured yet" in reason
+                           or "connection failed" in reason
+                           or "the settings there are probably wrong" in reason)
+            if not unreachable:
+                raise
+            first = reason.strip().splitlines()[0]
+            skipped.append((slug, first))
+            print(f"\n[{slug}] SKIPPED — {first}")
+            continue
         assert isinstance(res, list) and res, f"{slug}: no partitions returned"
         print(f"\n[{slug}] get_resources: {len(res)} partitions, e.g. {res[0]}")
 
@@ -83,6 +102,15 @@ async def read_only_tier(hpc, docs_hpc) -> list[str]:
         docs = await docs_hpc.search_docs(facility=slug, query="how do I submit a job")
         assert docs.strip(), f"{slug}: empty docs result"
         print(f"[{slug}] search_docs: {docs[:70]!r}...")
+
+    if skipped:
+        print(f"\nskipped {len(skipped)} unreachable facility/ies:")
+        for slug, reason in skipped:
+            print(f"  - {slug}: {reason}")
+    reached = len(slugs) - len(skipped)
+    assert reached, ("every facility was unreachable — this is a local "
+                     "configuration problem, not a per-facility skip")
+    print(f"reached {reached} of {len(slugs)} facilities")
 
     try:
         await hpc.get_resources(facility="not-a-real-facility")
