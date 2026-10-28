@@ -125,8 +125,8 @@ class GridEngineBackend(SchedulerBackend):
         else:
             lines.append("#$ -cwd")
 
-        stdout = spec.stdout_path or f"~/{self._jobs_dir}/{spec.name}.o"
-        stderr = spec.stderr_path or f"~/{self._jobs_dir}/{spec.name}.e"
+        stdout = norm_path(spec.stdout_path or f"~/{self._jobs_dir}/{spec.name}.o")
+        stderr = norm_path(spec.stderr_path or f"~/{self._jobs_dir}/{spec.name}.e")
         lines.append(f"#$ -o {stdout}")
         lines.append(f"#$ -e {stderr}")
 
