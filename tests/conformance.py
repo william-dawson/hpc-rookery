@@ -973,6 +973,143 @@ def check_facility(slug: str) -> None:
                     "unconfigured get_projects did not return setup instructions"
                 )
 
+    def roquo_partition_rules_and_silent_traps_are_enforced():
+        """ROQUO publishes its own rejection codes, and has one failure that
+        is silent: a work job over three days without --qos=long is accepted
+        and then never scheduled, parked on QOSMaxWallDurationPerJobLimit.
+        From outside that is indistinguishable from a busy queue, so it has
+        to be caught at submit time or not at all."""
+        if slug != "roquo":
+            return
+
+        def spec(resources=None, **attrs):
+            return JobSpec.model_validate({
+                "name": "roquo-conformance", "executable": "true",
+                "resources": resources or {},
+                "attributes": attrs,
+            })
+
+        def rendered(s):
+            backend.apply_defaults(s)
+            backend.validate_spec(s)
+            return backend.render_script(s)
+
+        # Per-node gres dialect, with --nodes always emitted. Carrying
+        # RIKYU's job-total --gpus=N over to this machine would be wrong.
+        script = rendered(spec({"gpus": 2}, duration=3600))
+        assert "#SBATCH --gres=gpu:2" in script, script
+        assert "#SBATCH --gpus=" not in script, script
+        assert "#SBATCH --nodes=1" in script, script
+        assert "#SBATCH --partition=roquo" in script, script
+
+        # QOS and topology ride through custom_attributes.
+        multi = rendered(spec({"gpus": 4, "node_count": 4}, duration=3600,
+                              custom_attributes={"qos": "p2", "switches": "1"}))
+        assert "#SBATCH --qos=p2" in multi and "#SBATCH --switches=1" in multi
+
+        rejected = [
+            # ROQUO-E001: more than one node's GPUs in a single request.
+            ({"gpus": 5}, {"duration": 3600}, "ROQUO-E001"),
+            # Over the partition's own MaxTime: Slurm refuses this loudly,
+            # so the message must say so rather than blaming the QOS.
+            ({"gpus": 1}, {"duration": "4-00:00:00"}, "partition's own limit"),
+            # Over a QOS ceiling but inside the partition's: the silent
+            # park. Real on roquo too, not just work.
+            ({"gpus": 1}, {"duration": "13:00:00",
+                           "custom_attributes": {"qos": "p3"}}, "never starts"),
+            ({"gpus": 1}, {"duration": "2-12:00:00",
+                           "custom_attributes": {"qos": "p1"}}, "never starts"),
+            # AllowQos, read live: long is work-only, general is neither.
+            ({"gpus": 1}, {"duration": 3600,
+                           "custom_attributes": {"qos": "long"}},
+             "not accepted by the 'roquo' partition"),
+            ({"gpus": 1}, {"duration": 3600,
+                           "custom_attributes": {"qos": "general"}},
+             "not accepted by the 'roquo' partition"),
+            # Partitions withdrawn 2026-10-13 must name their replacement.
+            ({"gpus": 1}, {"duration": 3600,
+                           "queue_name": "roquo-rack01"}, "removed on 2026-10-13"),
+            ({"gpus": 1}, {"duration": 3600, "queue_name": "gpu"}, "Unknown ROQUO partition"),
+            # work partition: ROQUO-E101 / E102 / E103, and no GPUs.
+            ({}, {"queue_name": "work", "duration": 3600}, "ROQUO-E101"),
+            ({"cpu_cores_per_process": 193},
+             {"queue_name": "work", "duration": 3600}, "ROQUO-E102"),
+            ({"cpu_cores_per_process": 4, "memory": 40 * 1024 ** 3},
+             {"queue_name": "work", "duration": 3600}, "ROQUO-E103"),
+            ({"gpus": 1, "cpu_cores_per_process": 8},
+             {"queue_name": "work", "duration": 3600}, "no GPUs"),
+            ({"cpu_cores_per_process": 4},
+             {"queue_name": "work", "duration": 3600,
+              "custom_attributes": {"qos": "p1"}},
+             "not accepted by the 'work' partition"),
+            # The silent one, and the 'long' QOS's own caps.
+            ({"cpu_cores_per_process": 4},
+             {"queue_name": "work", "duration": "4-00:00:00"},
+             "never starts"),
+            ({"cpu_cores_per_process": 4},
+             {"queue_name": "work", "duration": "31-00:00:00",
+              "custom_attributes": {"qos": "long"}}, "partition's own limit"),
+            ({"cpu_cores_per_process": 8},
+             {"queue_name": "work", "duration": "30-00:00:00",
+              "custom_attributes": {"qos": "long"}}, "limits a job to 4 CPUs"),
+        ]
+        for resources, attrs, expected in rejected:
+            bad = spec(resources, **attrs)
+            try:
+                backend.apply_defaults(bad)
+                backend.validate_spec(bad)
+            except ValueError as exc:
+                assert expected in str(exc), (
+                    f"roquo rejected {resources}/{attrs} but the message did "
+                    f"not mention {expected!r}: {exc}"
+                )
+            else:
+                raise AssertionError(
+                    f"roquo accepted {resources}/{attrs}, expected a rejection "
+                    f"mentioning {expected!r}"
+                )
+
+        # Legitimate shapes must still pass, including the long-QOS 30-day
+        # run and a 36-node full-node job.
+        for resources, attrs in (
+            # No normal-QOS node cap: a large job must not be refused here.
+            ({"gpus": 4, "node_count": 40}, {"duration": 3600}),
+            # p4/p5 are in both partitions' AllowQos but absent from the
+            # manual; refusing them would block legitimate work.
+            ({"gpus": 1}, {"duration": 3600,
+                           "custom_attributes": {"qos": "p4"}}),
+            ({"cpu_cores_per_process": 4},
+             {"queue_name": "work", "duration": 3600,
+              "custom_attributes": {"qos": "p5"}}),
+            ({"cpu_cores_per_process": 4},
+             {"queue_name": "work", "duration": "30-00:00:00",
+              "custom_attributes": {"qos": "long"}}),
+            ({"cpu_cores_per_process": 16}, {"queue_name": "work", "duration": 3600}),
+        ):
+            assert rendered(spec(resources, **attrs)).strip()
+
+        # get_projects must mark the personal account unchargeable: ROQUO
+        # refuses a job charged to it (E202), sacctmgr lists it beside the
+        # real billing group, and it tends to sort first.
+        assoc = "q0000227||normal\nqc-prj-tup0000||normal\n"
+        with patch("facilities.roquo.facility.run_command") as ran, \
+                patch("hpc_agent_core.compute.slurm.run_command",
+                      return_value=assoc):
+            ran.return_value = "q0000227\n"
+            projects = backend.get_projects()
+        by_account = {p["account"]: p for p in projects}
+        assert by_account["q0000227"]["chargeable"] is False
+        assert "E202" in by_account["q0000227"]["note"]
+        assert by_account["qc-prj-tup0000"]["chargeable"] is True
+        assert "note" not in by_account["qc-prj-tup0000"]
+
+        # Slurm's --time grammar: a bare number is minutes, not hours.
+        # Reading it as hours would let the three-day work trap through.
+        from facilities.roquo.facility import RoquoBackend
+        assert RoquoBackend._duration_seconds("90") == 5400
+        assert RoquoBackend._duration_seconds("2-12:30") == 217800
+        assert RoquoBackend._duration_seconds("bogus") is None
+
     print(f"\n=== {slug} ({fac.display_name}) ===")
     check("registration is complete", registration_is_complete)
     check("facts JSON loads", facts_load)
@@ -1004,6 +1141,9 @@ def check_facility(slug: str) -> None:
     if slug == "irene":
         check("Bridge shape, parsers, and machine limits are enforced",
               irene_bridge_shape_and_limits_are_enforced)
+    if slug == "roquo":
+        check("partition rules and silent QOS traps are enforced",
+              roquo_partition_rules_and_silent_traps_are_enforced)
     if slug == "cell2026":
         check("dual-scheduler rendering, validation, and routing are enforced",
               cell2026_dual_scheduler_routing_is_enforced)

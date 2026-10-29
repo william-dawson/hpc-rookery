@@ -1,0 +1,261 @@
+{
+  "machine": "ROQUO",
+  "site": "RIKEN Center for Computational Science (R-CCS), Kobe",
+  "status": "In service. Written from the operator's manual (portal.roquo.qc.r-ccs.riken.jp/manual/en), then checked against the live system on 2026-10-27. Verified live: SSH to login3, Slurm 26.05.3, both partitions and their node counts, the per-partition AllowQos and per-QOS MaxWall policy, get_resources, and that a rendered script is accepted and size-adjusted by sbatch. NOT verified: a job running to completion - the available project (qc-prj-tup0000) has zero billing points, so submission stops at ROQUO-E201. Where the manual and the live system disagreed, the values here follow the live system and say so.",
+  "login": {
+    "ssh_host": "login.roquo.qc.r-ccs.riken.jp",
+    "login_node_aliases": [
+      "login1",
+      "login2",
+      "login3"
+    ],
+    "login_node_pattern": "loginN.roquo.qc.r-ccs.riken.jp",
+    "methods": [
+      "ssh",
+      "portal"
+    ],
+    "portal_url": "https://portal.roquo.qc.r-ccs.riken.jp/",
+    "key_registration": "ROQUO Portal -> SSH Keys -> paste the contents of your .pub file -> Add. If the screen says keys cannot be changed there, open a portal ticket instead.",
+    "recommended_key_types": [
+      "ed25519"
+    ],
+    "architecture_note": "Login nodes are x86_64 but compute nodes are aarch64, so anything built on a login node will not run on a compute node. Build on a compute node.",
+    "support_ticket": "https://portal.roquo.qc.r-ccs.riken.jp/ (portal access problems: jhpc-quantum-support@ml.riken.jp)"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "cluster_name": "roquo",
+    "partitions": [
+      {
+        "name": "roquo",
+        "description": "Default partition; GB200 GPU compute nodes, aarch64. 135 nodes across 8 racks (qr01-qr08), node names like qr01n01.",
+        "nodes": 135,
+        "architecture": "aarch64",
+        "gpus_per_node": 4,
+        "max_wall_time": "3-00:00:00",
+        "default_wall_time": "01:00:00",
+        "max_nodes_per_job": "No partition or normal-QOS cap (live: partition MaxNodes=UNLIMITED). The manual's '36 nodes per job' is the `general` QOS's MaxNodesPerJob, and `general` is not in this partition's AllowQos."
+      },
+      {
+        "name": "work",
+        "description": "CPU-only partition, x86_64. Five nodes (work01-work05) for builds, pre/post-processing, workflow servers and VS Code Remote. No GPUs.",
+        "nodes": 5,
+        "architecture": "x86_64",
+        "cpu": "AMD EPYC 9655, 96 cores x 2 SMT threads = 192 logical CPUs per node",
+        "memory_per_node": "~1510 GiB usable",
+        "gpus_per_node": 0,
+        "max_wall_time": "3-00:00:00",
+        "max_wall_time_with_qos_long": "30-00:00:00",
+        "default_wall_time": "01:00:00"
+      }
+    ],
+    "default_partition": "roquo",
+    "removed_partitions": {
+      "names": [
+        "roquo-rack01",
+        "roquo-rack02",
+        "roquo-rack03",
+        "roquo-rack04",
+        "roquo-rack05",
+        "roquo-rack06",
+        "roquo-rack07",
+        "roquo-rack08"
+      ],
+      "note": "Per-rack partitions were removed on 2026-10-13. Use --switches=1 on the roquo partition to keep an allocation inside one rack instead."
+    },
+    "gpu_request_style": "gres",
+    "gpu_flag": "--gres=gpu:N  (N = 1-4, per node)",
+    "nodes_always_explicit": true,
+    "account_required": true,
+    "account_flag": "--account=<project>",
+    "account_note": "Always set it. It selects both the billing target and the group that owns files the job writes; without it a job falls back to a restrictive default account. It is not a hard rejection, so a job can run and behave oddly instead of failing cleanly. List your accounts with `sacctmgr -nP show assoc user=$USER format=Account` or get_projects. get_projects returns both a billing group and an unchargeable personal account named after the username; only the former can be charged (ROQUO-E202). Billing is by points, and a job is refused up front if the group's balance is short (ROQUO-E201) - roughly 7000 points for a 5-minute single-GPU job and 66 for a 5-minute 2-CPU work job, as measured.",
+    "qos": {
+      "note": "Pass as custom_attributes.qos, which renders as #SBATCH --qos=<name>. Allowed-per-partition comes from `scontrol show partition` AllowQos; ceilings from `sacctmgr show qos` MaxWall. Verified live 2026-10-27.",
+      "allowed_by_partition": {
+        "roquo": [
+          "normal",
+          "p1",
+          "p2",
+          "p3",
+          "p4",
+          "p5"
+        ],
+        "work": [
+          "normal",
+          "long",
+          "p4",
+          "p5"
+        ]
+      },
+      "max_wall": {
+        "normal": "3-00:00:00",
+        "p1": "2-00:00:00",
+        "p2": "1-00:00:00",
+        "p3": "12:00:00",
+        "long": "30-00:00:00",
+        "p4": "no MaxWall set; bounded only by the partition's MaxTime",
+        "p5": "no MaxWall set; bounded only by the partition's MaxTime"
+      },
+      "other_limits": {
+        "long": "4 CPUs and 8 GiB per job, 8 CPUs and 16 GiB per user, 4 concurrent jobs",
+        "p3": "1 concurrent job per user",
+        "general": "MaxWall 1 day, 36 nodes per job - but not in either partition's AllowQos, so unusable on roquo or work"
+      },
+      "silent_trap": "Exceeding a QOS's MaxWall while still inside the partition's MaxTime is accepted by Slurm and then never scheduled: the job parks on QOSMaxWallDurationPerJobLimit, which looks identical to a busy queue. This is any work job over 3 days without --qos=long, and equally any roquo job over its p1/p2/p3 ceiling. submit_job refuses these up front.",
+      "partition_max_time": {
+        "roquo": "3-00:00:00",
+        "work": "30-00:00:00"
+      }
+    },
+    "node_plans": {
+      "note": "A GPU request on the roquo partition rounds up to one of three fixed plans. Asking for more than one full node's worth in a single --gres request is rejected with ROQUO-E001; use --gres=gpu:4 with --nodes=N instead.",
+      "plans": [
+        {
+          "name": "qtr",
+          "gpus": 1,
+          "cpu_cores": 36,
+          "memory_gb": 400
+        },
+        {
+          "name": "half",
+          "gpus": 2,
+          "cpu_cores": 72,
+          "memory_gb": 800
+        },
+        {
+          "name": "full",
+          "gpus": 4,
+          "cpu_cores": 144,
+          "memory_gb": 1600
+        }
+      ],
+      "default_plan": "qtr (what a job with no GPU, CPU or memory flags receives)"
+    },
+    "topology": "Add --switches=1 to keep an allocation within one rack. It waits up to 5 minutes before spanning racks; --switches=1@<time> shortens that wait.",
+    "error_codes": {
+      "ROQUO-E001": "GPU/CPU/memory request exceeds one node. Use --gres=gpu:4 --nodes=N.",
+      "ROQUO-E101": "No CPU count given on the work partition. Set --cpus-per-task or --ntasks.",
+      "ROQUO-E102": "Too many CPUs requested on work (max 192).",
+      "ROQUO-E103": "Too much memory requested on work (max 8 GiB per allocated CPU).",
+      "ROQUO-W003": "Not an error despite the prefix: ROQUO prints warnings as 'sbatch: error: [ROQUO-Wnnn]'. W003 means the request was rounded up to a node plan (e.g. to the 1/4 slot: 1 GPU / 36 cores / 400000 MB), which is normal. Judge success by sbatch's exit status and whether a job id came back, not by the presence of 'error:' in its output.",
+      "ROQUO-E201": "Insufficient billing points for the charging group: 'Not enough billing points (remaining N, this job needs M). Billing group: <project>.' The job is refused and sbatch ends with the unhelpful 'Batch job submission failed: Unspecified error', so read the whole stderr, not just the last line. There is no CLI for the balance - it is in the ROQUO Portal - and the fix is to ask the administrators to add points, or to charge a different project with attributes.account.",
+      "ROQUO-E202": "A job was submitted against a personal account: 'Jobs cannot be submitted with a personal account (<username>).' sacctmgr lists a personal association alongside the real billing group, and it is not chargeable. get_projects marks each entry with chargeable true/false so this is visible before submitting. Use the qc-prj-* billing group."
+    },
+    "mail_note": "Notifications need both --mail-type (e.g. END,FAIL) and --mail-user set to a full address containing '@'. A bare username silently sends nothing.",
+    "output_note": "sbatch messages are bilingual: each line appears in Japanese and then in English. Both lines carry the same ROQUO-nnn code, so match on the code rather than on message text."
+  },
+  "compute_node": {
+    "model": "NVIDIA GB200",
+    "architecture": "aarch64",
+    "gpus_per_node": 4,
+    "gpu_compute_capability": "10.0 (Blackwell; nvcc -arch=sm_100, NVHPC -gpu=cc100)",
+    "interconnect": "One NIC directly attached per GPU, GPUDirect RDMA enabled.",
+    "measured_bandwidth": "~93 GB/s for a single GPU pair at 16 MB; ~378 GB/s aggregate across two nodes of 4 GPUs at 32 MB"
+  },
+  "storage": {
+    "home": {
+      "path": "/home/hps1/<username>",
+      "purpose": "Small area for configuration and source. Not for datasets or images.",
+      "check_quota_cmd": "lfs quota -h -u $USER /home/hps1",
+      "quota": "not published in the manual (listed as TBD) - read it live"
+    },
+    "project": {
+      "path": "/projects/hps1/<project>",
+      "filesystem": "Lustre",
+      "purpose": "Persistent, shared by project members. Datasets, results and container (SIF) images belong here.",
+      "check_quota_cmd": "lfs df -h /projects/hps1",
+      "quota": "not published in the manual (listed as TBD) - read it live; changes are requested through the portal with a required reason",
+      "shared_across_nodes": true
+    },
+    "scratch": {
+      "path": "/scratch/<jobid>",
+      "env_var": "$SLURM_SCRATCH",
+      "filesystem": "node-local NVMe",
+      "purged": "deleted when the job ends - copy anything you need out before then",
+      "shared_across_nodes": false,
+      "tmpdir_note": "$TMPDIR points at $SLURM_SCRATCH/tmp inside a job. Do not write to /tmp directly."
+    }
+  },
+  "modules": {
+    "system": "Lmod",
+    "login_node_note": "Modules load on compute nodes only, not on login nodes. A module load in a login shell will not behave like one inside a job.",
+    "available": [
+      {
+        "name": "gcc/14",
+        "description": "GCC toolchain"
+      },
+      {
+        "name": "cuda/13.3",
+        "description": "CUDA Toolkit. Note `module load cuda` resolves to cuda/13.4, which is the default, not 13.3."
+      },
+      {
+        "name": "hpcx/2.50",
+        "description": "NVIDIA HPC-X, OpenMPI 5 over UCX. Launch with srun (PMIx). hpcx/2.51 is also available."
+      },
+      {
+        "name": "nvhpc/26.9",
+        "description": "NVIDIA HPC SDK compilers"
+      },
+      {
+        "name": "nvhpc-openmpi/26.5",
+        "description": "HPC-X bundled with NVHPC, OpenMPI 4 over UCX. Launch with mpirun, not srun."
+      }
+    ],
+    "commands": [
+      "module avail",
+      "module load <name>",
+      "module list",
+      "module unload <name>",
+      "module purge",
+      "module spider <keyword>"
+    ]
+  },
+  "mpi": {
+    "stacks": [
+      {
+        "modules": [
+          "hpcx/2.50"
+        ],
+        "mpi": "OpenMPI 5 / UCX",
+        "launcher": "srun"
+      },
+      {
+        "modules": [
+          "gcc/14",
+          "nvhpc/26.5",
+          "nvhpc-openmpi/26.5"
+        ],
+        "mpi": "OpenMPI 4 / UCX",
+        "launcher": "mpirun"
+      }
+    ],
+    "mutually_exclusive": "Lmod swaps one stack out when the other is loaded - they cannot both be active.",
+    "gotchas": [
+      "On the NVHPC stack, `srun --mpi=pmix` aborts before MPI_Init and is unsupported. Use mpirun.",
+      "Do not load the cuda module or set NVHPC_CUDA_HOME alongside the NVHPC stack; it breaks mpirun.",
+      "Plain -lmpi fails with 'cannot find -lmpi'. Pass the MPI include and library paths explicitly.",
+      "mpicc -cuda does not work (a CUDA 13.2 device-header conflict). Compile with nvcc using nvc++ as host compiler, or call nvc++ directly.",
+      "Call cudaSetDevice() and cudaFree(0) before MPI_Init, or the job aborts with 'cannot find remote protocol'.",
+      "Slurm's TaskProlog injects the UCX settings CUDA-aware MPI needs. Do not unset them.",
+      "NVSHMEM applications (e.g. HPL in the hpc-benchmarks container) need NVSHMEM_IBGDA_NIC_HANDLER=cpu_host_memory, or they can hang after cuda_nvshmem_init. Plain CUDA-aware MPI does not need it.",
+      "Request whole nodes (--gres=gpu:4) for tightly coupled multi-node work: fewer GPUs means fewer NICs and less bandwidth."
+    ]
+  },
+  "containers": {
+    "runtimes": [
+      {
+        "name": "Pyxis/Enroot",
+        "usage": "srun --container-image=nvcr.io#nvidia/<image:tag> --container-mounts=<host>:<container> <cmd>"
+      },
+      {
+        "name": "Apptainer",
+        "usage": "apptainer exec --nv <image.sif> <cmd>"
+      }
+    ],
+    "architecture_note": "Images must be aarch64-compatible. An x86_64 image will not run on a compute node.",
+    "image_storage": "Keep SIF images under /projects/hps1/<project>."
+  },
+  "vscode_remote": {
+    "note": "You can only SSH into a work node while your own job is running on it. The documented approach puts a ProxyCommand in your local ~/.ssh/config that runs srun on the login node and relays through socat to the node's sshd, so VS Code allocates a node on connect and releases it on disconnect. socat is preinstalled on work nodes. The connection drops when --time expires."
+  }
+}
