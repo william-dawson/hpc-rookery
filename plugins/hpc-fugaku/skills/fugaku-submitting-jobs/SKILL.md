@@ -35,6 +35,18 @@ or `resources.gpu_cores_per_process`; both are rejected outright.
    rank count. An `mpiexec -n <N>` launcher is added automatically whenever
    more than one task is requested — don't add it yourself unless you need
    non-default `mpiexec` flags (set `launcher` explicitly to override).
+
+   **Submitting a custom multi-rank-per-node script directly with raw
+   `pjsub`** (via `run_command_on_cluster`, bypassing this tool — common
+   for a self-contained orchestration script that itself calls `mpiexec`
+   one or more times) does not get this flag for free. Add
+   `--mpi "max-proc-per-node=N"` to the `pjsub` command yourself whenever
+   more than one rank will land on a node; omitting it fails at the
+   scheduler level, not the application's, with `[ERR.] PLE 0005 plexec
+   The specified number of processes is too many` — easy to misread as an
+   application bug since the job otherwise looks like it started. Verified
+   live, recurring: hit this independently at both RPN=2 and RPN=4 before
+   the pattern was recognized.
 4. **Declare second-layer storage.** If the job touches anything outside
    `$HOME` — a group data volume, or Spack — set
    `attributes.custom_attributes["gfscache_volume"]` (e.g. `"/vol0004"`)

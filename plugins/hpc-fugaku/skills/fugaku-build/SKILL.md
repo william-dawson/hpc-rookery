@@ -460,6 +460,32 @@ output.<JOBID>/0/1/stdout.1.0
 
 Plan log-gathering scripts accordingly.
 
+### Non-blocking collectives don't get real background progress
+
+`MPI_Iallgather` (and, by extension, the other MPI-3 non-blocking
+collectives) is present and correct on Fujitsu MPI, but issuing it does
+**not** buy autonomous network-driven progress while your code does other
+work before calling `MPI_Wait`. Measured directly: a 4-node, 1-rank/node
+probe (`MPI_Iallgather`, then a timed busy-loop of varying length, then
+`MPI_Wait`) showed the time still remaining inside `MPI_Wait` stays flat
+regardless of whether the busy-loop ran 10ms or 200ms — a 20x difference
+in elapsed "overlap window" with no corresponding drop in wait time. There
+is a small, real, *fixed* benefit from issuing early (6-20% of the total
+transfer time at message sizes 32-128MB, likely some call-setup/rendezvous
+overhead the blocking call doesn't get to skip), but nothing further
+progresses in the background no matter how long you wait to call `Wait`.
+
+**Consequence for anything built on this expecting real compute/comm
+overlap** (e.g. a communication library wrapping these collectives for a
+higher-level framework): budget for collectives as effectively blocking
+at `Wait`/`Test` time, not as something that frees the CPU for the full
+transfer duration. A `MPI_THREAD_SERIALIZED`-level program that only ever
+calls MPI from one thread (the safe, portable pattern) will not see this
+change — the limitation is in the collective's own progress engine, not
+thread-safety level. Minimal reproducer and full numbers:
+`report/deepspeed-fugaku/mpi-overlap/overlap_probe.c` in
+`william-dawson/push_torch`.
+
 ---
 
 ## Build diagnostics checklist
