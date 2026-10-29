@@ -91,4 +91,21 @@ project's remaining balance with `get_project_allocations(facility="{{SLUG}}",
 project_id="<group>")`. Use it only for deliberate fast-turnaround
 validation; revert to `small` for production runs.
 
-Use `small` with a short `elapse` for validation jobs.
+**`small`'s short `elapse` controls how long a job *runs*, not how soon it
+*starts*.** A small, short job can still sit in `small`'s shared backlog
+for a long and unpredictable time — verified live: a trivial 4-node,
+10-minute validation job's estimated start kept slipping further out the
+longer it waited (next estimate always later than the last), while the
+identical job on `f-pt` started in under a minute. Job size and
+queue-wait time are independent; a tiny job is not a fast job if the
+queue it's in is backlogged.
+
+**If a job is genuinely time-sensitive — the user is waiting on the
+result right now, or it's interactive debugging/validation, not a
+production run — raise `f-pt` as an option proactively once `small`'s
+wait looks real** (the estimated start keeps slipping, or lands far out
+relative to how small the job is), rather than silently re-polling an
+indefinitely queued job until the user asks. Still always check the
+point balance and get explicit confirmation before switching — this
+surfaces the option promptly, it doesn't authorize spending points
+without asking.
