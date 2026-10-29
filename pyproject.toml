@@ -17,7 +17,17 @@ dependencies = [
     # widening a ceiling. hpc_agent_core/mcp_server.py is the only file that
     # imports it directly.
     "mcp==2.0.0",
-    "remotemanager",
+    # remotemanager is the whole transport layer: every cluster call in
+    # middleware.py goes through a remotemanager Computer, so a change in
+    # how it opens connections, quotes payloads or reports failures changes
+    # every tool on every facility at once. Same reasoning as mcp above, and
+    # it matters more here because the documented install is
+    # `uv tool run --from git+...@main`, which resolves dependencies fresh
+    # every time there is no cached tool environment — an unpinned transport
+    # means a user's first call can behave differently from ours. 0.14.3 is
+    # what all ten facilities have been verified against. Bump deliberately,
+    # after re-running conformance and a live smoke test.
+    "remotemanager==0.14.3",
     "httpx",
     "numpy",
     "pydantic",
