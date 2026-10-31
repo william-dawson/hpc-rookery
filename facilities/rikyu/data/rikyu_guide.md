@@ -165,6 +165,54 @@ shared dependencies don't have to rebuild from scratch. Never build
 anything heavy on a login node — use an interactive job (`salloc`/`srun`)
 or submit a build as its own batch job.
 
+## Containers (Apptainer/Singularity)
+
+Apptainer (the `singularity` command also works) runs software the
+modules and Spack don't provide. Two properties of the RIKYU environment
+bite every first-time container user; plan for both up front.
+
+**First: pulls stage blobs in your home directory.** `singularity pull`
+downloads OCI layers into `~/.apptainer/cache/blob/` before assembling the
+SIF. Home has a 5 GB quota, so any image larger than a couple of GB fails
+late in the pull with `disk quota exceeded` — after the wasted transfer has
+also filled your home quota. Point the cache and temp dirs at the group
+area instead, and clean the partial blobs out of home:
+
+```bash
+rm -rf ~/.apptainer/cache/blob          # reclaim the quota the failed pull ate
+export APPTAINER_CACHEDIR=/data1/<GROUP>/.apptainer_cache
+export SINGULARITY_CACHEDIR=$APPTAINER_CACHEDIR
+export APPTAINER_TMPDIR=/data1/<GROUP>/tmp
+export SINGULARITY_TMPDIR=$APPTAINER_TMPDIR
+mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
+singularity pull /data1/<GROUP>/containers/myimage.sif docker://<registry>/<image>
+```
+
+**Second: the host filesystem is read-only inside the container by
+default.** Paths like `/data1` are visible but not writable, so any
+application that creates a cache at a host path dies at import or startup
+with `OSError: [Errno 30] Read-only file system`. The fix is to
+bind-mount each directory the container must write, **at the same path**,
+with `:rw`:
+
+```bash
+CACHE=/data1/<GROUP>/.cache
+mkdir -p "$CACHE"
+export XDG_CACHE_HOME="$CACHE"          # example: point the app's cache at /data1
+
+singularity exec --nv \
+    -B /data1/<GROUP>/datasets:/datasets:ro \
+    -B "$CACHE:$CACHE:rw" \
+    /data1/<GROUP>/containers/myimage.sif ./run.sh
+```
+
+The cache bind uses the same path on both sides (`-B "$CACHE:$CACHE:rw"`)
+on purpose: env vars written for host paths keep working unchanged inside
+the container. Mounting to a different container path while leaving the
+env vars at host paths is a common way to recreate the read-only crash.
+Bind only what the container genuinely writes; keep inputs read-only
+(`:ro`).
+
 ## Common failure modes
 
 - **`spack: command not found`** — the Spack `setup-env.sh` line was never
@@ -189,6 +237,16 @@ or submit a build as its own batch job.
 - **A GPU job runs but the application can't see any GPU** — the Slurm
   request is missing `--gpus=N`; loading GPU-enabled software through Spack
   does not itself allocate hardware.
+- **A container pull fails with `disk quota exceeded`** — Apptainer staged
+  the image layers in `~/.apptainer/cache/blob/` against the 5 GB home
+  quota. Redirect `APPTAINER_CACHEDIR` (and `APPTAINER_TMPDIR`) to the
+  group area and delete `~/.apptainer/cache/blob` to reclaim the quota
+  (see "Containers" above).
+- **`OSError: [Errno 30] Read-only file system` from inside a container** —
+  the application tried to write a cache to a host path; the host
+  filesystem mounts read-only inside Apptainer by default. Bind-mount the
+  directory with `-B path:path:rw` at the same path and point the
+  application's cache env vars there (see "Containers" above).
 
 ## Billing
 
