@@ -170,7 +170,24 @@ with nothing to catch it.
 Read the machine's real official documentation, then **write your own
 guide, in your own words** — a plain-language orientation for someone
 driving the machine through the agent, not a paraphrase or copy of the
-vendor manual. Deliberately omit:
+vendor manual.
+
+That is a legal line, not just an editorial preference. The official
+documentation is copyrighted material: pasting its prose, tables, or worked
+examples into this repo verbatim would be a license violation, and a
+lightly-reworded paraphrase is barely better. Facts are not copyrightable —
+queue names, node counts, walltime limits, directive syntax, a command's
+output columns — so *record* those freely, but every sentence expressing
+them must be newly written here. The same rule covers everything else a
+port adds: `skill_notes/`, the facts JSON's descriptive text, docstrings,
+code comments, and test fixtures — invent your own sample rows rather than
+copying the docs' example output, with one exception: strings the machine
+itself emits that your parser must match (a scheduler's literal error or
+comment text) are functional interface facts, not creative prose. A useful
+self-check: nothing you commit should be findable inside the source
+documentation by searching for a sentence of it.
+
+Deliberately omit:
 - generic HPC/Linux background (what a batch scheduler is, what SSH is),
 - anything the agent can query live instead of memorizing (`sinfo`,
   `module avail`, current queue occupancy, your billing balance).
