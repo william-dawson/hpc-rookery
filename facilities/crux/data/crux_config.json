@@ -1,0 +1,110 @@
+{
+  "machine": "Crux",
+  "site": "Argonne Leadership Computing Facility (ALCF), Argonne National Laboratory",
+  "verification": {
+    "source": "ALCF's public Crux user guides and the PBS Professional command reference, then live-validated on 2026-11-02",
+    "live_validated": true,
+    "live_checks": "doctor green; read-only smoke (get_resources from qstat -Q + pbsnodes, get_projects via sbank, search_docs); real one-node debug jobs submitted through submit_job, polled to completion via qstat -fx -F JSON, output read back via fs_tail; get_recent_statuses via qselect; sbank allocation/job queries",
+    "note": "Recorded queue limits remain dated orientation — ALCF can change them; re-check with qstat -Qf <queue> before relying on a limit."
+  },
+  "login": {
+    "hostname": "crux.alcf.anl.gov",
+    "authentication": "ALCF requires multi-factor authentication: every SSH login asks for a one-time passcode from a SafeNet MobilePASS+ app or a physical token. Non-interactive SSH cannot answer that prompt.",
+    "remote_access": "OpenSSH connection multiplexing: the user opens one master connection interactively (ssh -MNf <alias>, typing the passcode once) and every later ssh/rsync call reuses it with no new prompt. ssh.host must be that same alias.",
+    "on_node_alternative": "ssh.host = localhost when the agent itself runs on a Crux user access node (crux-uan-0001 / crux-uan-0002).",
+    "note": "A sudden 'Permission denied' means the master connection expired; the user re-runs ssh -MNf <alias>. Never ask the user for their passcode and never try to automate entering one."
+  },
+  "scheduler": {
+    "type": "PBS Professional (Altair), 2022.1",
+    "submission": "qsub",
+    "mandatory_directives": [
+      "-A <project> (an ALCF allocation project; qsub refuses without it)",
+      "-l walltime=HH:MM:SS",
+      "-l filesystems=<fs>[:<fs>...] (valid values: home, eagle)"
+    ],
+    "select_shape": "select=<nodes>:system=crux with place=scatter; ALCF schedules whole nodes (nodes run force_exclhost), so a chunk is one full node",
+    "output_handling": "The site forces -k doe: stdout/stderr stream straight to the directory qsub ran in, as <name>.o<seq> and <name>.e<seq>. Any other output-handling option is rejected by the server.",
+    "job_id_shape": "<seq>.crux-pbs-0001.head.cm.crux.alcf.anl.gov; the bare sequence number also works as an id in qstat/qdel",
+    "history": "qstat -x reaches finished jobs; ALCF retains about two weeks of history",
+    "accounting": "sbank (sbank-list-allocations, sbank-list-jobs, ...): node-hour accounting per project and resource",
+    "preemption": "Jobs in the preemptable queue can be killed at any time whenever demand-queue work is waiting; -r y makes a preempted job rerunnable, and this backend renders it automatically on that queue",
+    "reservations": "A reservation is a temporary queue name (see pbs_rstat); submit into one via spec.attributes.reservation_id, which the backend renders as #PBS -q",
+    "routing_queue_trap": "A job accepted by the workq-route routing queue can be refused by every execution queue after qsub has already returned, and then never appears in qstat at all. That is why node count and walltime are checked offline against the recorded queue limits before submission.",
+    "refresh_commands": [
+      "qstat -Q",
+      "qstat -Qf <queue>",
+      "qstat -was1 <jobid>",
+      "pbsnodes -avSj",
+      "sbank-list-allocations -r crux"
+    ]
+  },
+  "system": {
+    "nodes": 256,
+    "topology": "64 liquid-cooled HPE Cray EX blades with 4 nodes each, linked by HPE Slingshot; ~1.18 PF peak",
+    "cpu": "per node: 2x AMD EPYC 7742 (Rome), 64 cores each = 128 physical cores, 256 hardware threads",
+    "memory_gb_per_node": 256,
+    "numa": "8 NUMA domains per node: 4 per socket, 16 cores each (cores 0-15, 16-31, 32-47, 48-63 on socket 0; 64-127 on socket 1, same 16-core stride)",
+    "gpu": null,
+    "login_nodes": "crux-uan-0001 / crux-uan-0002, dual AMD EPYC 7543 (Milan)"
+  },
+  "defaults": {
+    "queue": "workq-route",
+    "filesystems": "home:eagle"
+  },
+  "queues": {
+    "debug": {
+      "min_nodes": 1, "max_nodes": 4,
+      "min_walltime_min": 5, "max_walltime_min": 120,
+      "type": "execution",
+      "note": "For short tests: at most one running plus one queued job per user, and no more than 8 nodes in use across all debug jobs."
+    },
+    "workq-route": {
+      "min_nodes": 1, "max_nodes": 176,
+      "min_walltime_min": 5, "max_walltime_min": 1440,
+      "type": "routing",
+      "note": "Production entry point; PBS routes jobs from here into the workq execution queue. Up to 100 jobs per project."
+    },
+    "workq": {
+      "min_nodes": 1, "max_nodes": 176,
+      "min_walltime_min": 5, "max_walltime_min": 1440,
+      "type": "execution",
+      "note": "Execution queue behind workq-route; per project at most 20 jobs queued+running and 10 running."
+    },
+    "preemptable": {
+      "min_nodes": 1, "max_nodes": 10,
+      "min_walltime_min": 5, "max_walltime_min": 4320,
+      "type": "execution",
+      "note": "Long walltimes, but any job here can be killed without warning the moment demand-queue work needs the nodes. -r y is rendered automatically so a killed job restarts. Max 20 jobs per project."
+    },
+    "demand": {
+      "min_nodes": 1, "max_nodes": 64,
+      "min_walltime_min": 5, "max_walltime_min": 60,
+      "type": "execution",
+      "note": "High-priority queue whose use is granted only on request (email support@alcf.anl.gov). Without that grant, submissions here are refused."
+    }
+  },
+  "storage": {
+    "home": "/home (Lustre 'agile-home', also mounted as /lus/agile/home): 50 GB per-user quota, backed up to tape. For small files, configs, and binaries.",
+    "eagle": "/eagle (also /lus/eagle/projects): Lustre project storage, quota per project directory, not backed up. For large files and anything with heavy I/O from compute nodes.",
+    "quota_commands": ["myquota", "myprojectquotas"],
+    "lustre_striping": "lfs setstripe controls striping; worth setting on large files written from many nodes",
+    "filesystems_directive": "Every job must name the filesystems it touches in -l filesystems; a job asking for a filesystem that is down will sit queued until that filesystem returns. Request only what the job actually reads/writes (default home:eagle covers both, but e.g. home alone is safer for a home-only job while eagle is down).",
+    "note": "Intensive compute-node I/O belongs on eagle, not home. Neither is node-local scratch."
+  },
+  "software": {
+    "programming_environments": "Cray programming environment by default (PrgEnv-cray); PrgEnv-gnu is also provided. Compile through the wrapper compilers cc (C), CC (C++), ftn (Fortran), which target whichever PrgEnv is loaded.",
+    "extra_software": "module use /soft/modulefiles exposes more; loading spack-pe-base adds cmake and further build tooling.",
+    "python": "Standard python3 venv + pip (mpi4py installs cleanly per ALCF's own notes); ALCF plans prebuilt CPU-optimized conda stacks (torch/tensorflow/jax) but they were not available when this port was written.",
+    "containers": "Apptainer support was announced as coming to Crux but was not available at port time; this backend rejects container specs with a clear error.",
+    "mpi_launch": "Cray MPICH, launched with mpiexec: -n <total ranks> --ppn <ranks/node> --depth <hardware threads per rank> --cpu-bind <mode>, plus --env for variables. Rank placement is decided by mpiexec at run time, not by the PBS select statement.",
+    "openmp_pitfall": "OMP_NUM_THREADS inherits a default of 256 on compute nodes — one per hardware thread. Any OpenMP job must set it explicitly or threads oversubscribe.",
+    "internet": "Outbound network from Crux goes through a proxy: export http_proxy/https_proxy/ftp_proxy=http://proxy.alcf.anl.gov:3128",
+    "interactive_builds": "Large parallel builds belong on compute nodes: qsub -I gets one interactively.",
+    "query_command": "module avail"
+  },
+  "job_limits": {
+    "node_memory_gib": 256,
+    "max_threads_per_node": 256
+  },
+  "support": "support@alcf.anl.gov; status.alcf.anl.gov shows live machine health; MyALCF (my.alcf.anl.gov) manages accounts, projects, and sbank views."
+}
