@@ -1,6 +1,6 @@
 ---
 name: fugaku-build
-description: Use when building, compiling, or linking software on Fugaku — choosing a compiler toolchain (Fujitsu vs LLVM vs GCC), MPI, BLAS/LAPACK, cross-compilation for A64FX, and verifying a build actually produces working parallel code.
+description: Use when building, compiling, linking or profiling software on Fugaku — choosing a compiler toolchain (Fujitsu vs LLVM vs GCC), MPI, BLAS/LAPACK, cross-compilation for A64FX, verifying a build actually produces working parallel code, and measuring where time goes (fipp, fapp, perf, percent of peak).
 user-invocable: true
 ---
 
@@ -554,7 +554,78 @@ Plan log-gathering scripts accordingly.
 
 ---
 
-## Profiling on compute nodes with `perf`
+## Profiling
+
+Fujitsu's tools come with TCS (`fipp`, `fapp` on compute nodes; `fipppx`,
+`fapppx` for post-processing on the x86 login nodes). Pick by question:
+
+| Question | Tool | Needs source changes? |
+|---|---|---|
+| Where does the whole program spend time? | `fipp` (sampling) | No |
+| FLOP/s, memory bandwidth, SIMD rate, IPC, MPI cost of one region | `fapp` | Yes: mark regions |
+| Full hardware breakdown (cache, pipeline, FP) as charts | `fapp` + CPU Performance Analysis Report | Yes |
+| Instruction-level hot spots (`perf annotate`) | `perf` | No |
+
+### Whole-program profile: `fipp`
+
+Low overhead, no recompilation. Collect in the job, then format on the login
+node:
+
+```sh
+fipp -C -Icpupa,mpi,call -d ./fipp_data ./app        # compute node
+fipppx -A -Icall,cpupa,mpi,src -ttext -o fipp.txt -d ./fipp_data   # login node
+```
+
+- Builds with link-time optimisation (`-Klto`/`-flto`) lose call-graph and
+  per-line accuracy; profile without it.
+- At scale, restrict post-processing to a few ranks with `-p` (e.g.
+  `-p0,1`) and add `-Inompi` if MPI data is not needed.
+- Samples shown as `__?unknown` did not map to a procedure; change the
+  sampling interval (`fipp -C -i …`).
+
+### Region counters and FLOP rates: `fapp`
+
+**`fapp` only measures code between `fapp_start`/`fapp_stop` calls**, so
+the source must be instrumented and recompiled (the profiler library is
+linked by default; `-Nnofjprof` / `-ffj-no-fjprof` would remove it):
+
+```fortran
+call fapp_start("solver", 1, 0)   ! name (letters, digits, _), id, level
+! ... region ...
+call fapp_stop("solver", 1, 0)
+```
+
+C/C++ use the same calls via `#include "fj_tool/fapp.h"`. Regions whose
+level exceeds the run-time level (`-L`) are skipped, which keeps overhead
+down. Then:
+
+```sh
+fapp -C -Icpupa,mpi -Hevent=pa1 -d ./fapp_pa1 ./app    # compute node
+fapppx -A -Icpupa,mpi -ttext -o fapp_pa1.txt -d ./fapp_pa1   # login node
+```
+
+Event set `pa1` (or `statistics`) gives the headline numbers: FLOP/s,
+memory throughput, SIMD instruction rate and IPC. To get **percent of
+peak**, divide FLOP/s by the A64FX peak: 48 cores × 32 double-precision
+flop/cycle × clock (≈3.07 TFLOP/s per node at 2.0 GHz). Never pass
+`-Inocpupa` at collection: it disables `-Hevent`.
+
+Running `fapp -C` on an un-instrumented program does not give a
+whole-program profile: in testing it ended with "fapp: The profiling data
+is not correctly generated" and wrote no data (seen both when wrapping each
+MPI rank and when wrapping the whole `mpiexec` launch). Use `fipp` for that.
+
+### CPU Performance Analysis Report
+
+For the full hardware picture, run the same instrumented program several
+times, one event set per run, each into its own directory: `pa1` alone for
+the single-page report, `pa1`–`pa5` for the brief one, up to `pa1`–`pa17`
+for the detailed one. Export each with `fapppx -A -tcsv -d ./rep<N> -o
+rep<N>.csv` and load the CSVs into Fujitsu's `cpu_pa_report.xlsm` Excel
+macro on a desktop. At large rank counts, limit the export with `-p` or the
+CSV may exceed Excel's row limit.
+
+### `perf` (sampling and annotation)
 
 `perf` works inside jobs (`perf_event_paranoid` is 1), but **the hardware
 `cycles` event records no samples** on these nodes: the run looks fine and
