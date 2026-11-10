@@ -76,6 +76,61 @@ Read the concrete path live instead of guessing the volume number:
 `accountd -E` on the login node lists the account's project groups,
 their `/vol0X0X/data/<group>/` paths, and quota usage.
 
+## Disk and inode pressure on the group volume
+
+Group data volumes are shared by every member, and a busy project can sit
+close to its limit. Writes then fail with `Disk quota exceeded` (EDQUOT)
+from jobs and from login-node `rsync`/`tar` alike, **even when `lfs quota`
+on the volume shows no user, group or project limit**; the enforced limit
+is not visible there. The **file count** can be the binding limit long
+before space is: removing a modest number of files can restore writes when
+freeing space alone would not.
+
+- Check `accountd -E` (space **and** file counts) before a large build,
+  a Spack install or a big result set. Treat inodes as the scarce resource.
+- Keep build stages, Spack/pip/conda caches and unpacked source trees
+  **off** the group data volume: put them in a job's compute-node `/tmp`
+  (see below) or another filesystem, and archive results to a few large
+  files instead of keeping many small ones.
+- Deleting is the user's call: show exact paths and get confirmation, and
+  start with obvious low-risk targets (caches, your own failed scratch).
+
+## Temporary storage inside a job
+
+- `$PJM_LOCALTMP` (`/local`) and `$PJM_SHAREDTMP` (`/share`) have **zero
+  capacity unless the job requests an LLIO size**. Writes fail with "No
+  space left on device". The bundled guide lists them as normal tiers; they
+  are empty by default. The request syntax is likely `#PJM --llio
+  localtmp-size=<N>Gi` / `sharedtmp-size=<N>Gi` (`custom_attributes.llio`
+  is accepted by `submit_job`), but it has not been verified to work here.
+  Test it with a small job before relying on it.
+- Compute-node `/tmp` is usable scratch (tens to hundreds of GB free), but
+  it is **NFS shared per node group and survives the job**, and different
+  jobs land on different node groups. Clean up **in the same job** that
+  wrote the files; a later cleanup job usually lands elsewhere. Set
+  `TMPDIR=/tmp` for tools (configure, Spack) that need a working temp dir.
+
+## Put multi-node I/O on `/2ndfs`
+
+For multi-node runs where several nodes write files and then read them
+back during the run (checkpoints, intermediate databases), put the run
+directory on `/2ndfs/<group>/...` (direct FEFS, no LLIO cache) rather than
+on the cached `/vol000N` path. On the cached path such runs have hung
+intermittently at the read-back and paid much slower write-then-read round
+trips. The same runs on `/2ndfs` did neither. The cause has not been
+established, so if a multi-node run stalls on I/O, `/2ndfs` is the first
+thing to try. Executables, environments and read-only
+inputs can stay on the group volume, and the job still needs
+`gfscache_volume` for them.
+
+## Typed submission with a self-launching driver
+
+If `executable` is a script or driver that calls `mpiexec` itself, set
+`launcher="env"`. Otherwise the auto-added `mpiexec -n N` wraps your
+driver and starts N copies of it. The launcher is prefixed to `executable`,
+so shell setup such as `source env.sh` belongs in `pre_launch`, not at the
+front of `executable`.
+
 ## The standard A64FX layout
 
 4 ranks per node (`processes_per_node: 4`) with 12 OpenMP threads per rank
@@ -89,7 +144,11 @@ project's remaining balance with `get_project_allocations(facility="fugaku",
 project_id="<group>")`. Use it only for deliberate fast-turnaround
 validation; revert to `small` for production runs.
 
-Use `small` with a short `elapse` for validation jobs.
+Use `small` with a short `elapse` for validation jobs. The two can differ
+by days: `f-pt` jobs usually start within minutes, while `small` can queue
+for a long time when the machine is busy. Check the estimated start
+(`pjstat` / `get_job_status`) of a queued `small` job. If it is far off,
+tell the user and let them decide whether to spend points.
 
 ## Universal rules (apply on every facility, not just this one)
 

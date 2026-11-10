@@ -51,6 +51,62 @@ Loaded by default on login and compute nodes.
 - `-Nclang` — switch the compiler frontend to Clang mode (if your code needs it; default mode is Fujitsu own)
 - `-Nlibomp` — link against LLVM OpenMP runtime instead of Fujitsu's (rarely needed)
 
+### Be skeptical of any Fujitsu build not using `-Kfast`
+
+A Fujitsu-compiler build at `-O2` (or with no level at all) should be
+treated as unoptimised until shown otherwise. `-O2` is a common "safe"
+choice while a cross-build is still being debugged, and it then tends to
+stay in the recipe. When you inherit a build, read its actual compile line
+(`config.log`, the build log, `make VERBOSE=1`) before trusting its
+timings. Comparing such a build against GCC `-O3` or LLVM `-O3` compares
+optimisation levels, not compilers.
+
+Without `-Kfast`, frt keeps strict IEEE semantics. Floating-point division
+and `SQRT` then use the full-precision hardware instructions instead of
+reciprocal-estimate sequences, and complex division, `ABS` and `**` go
+through careful runtime routines (e.g. `__g_cdabs`). In arithmetic-heavy
+loops that can cost a large factor.
+
+`-Kfast` relaxes those semantics (reciprocal approximations, FMA
+contraction, flush-to-zero). Build a strict (`-O2`) and a `-Kfast` binary
+of the same source, and **compare their science output** before adopting
+the faster one.
+
+### Optimization control lines (OCL)
+
+Fujitsu Fortran accepts per-loop and per-routine optimisation directives,
+so you can relax or tune only the code that matters and leave the rest of
+the build strict (or the reverse). Fortran syntax is `!OCL <specifier>`
+placed immediately before a program unit, a `DO` loop, or an array
+assignment statement:
+
+```fortran
+!OCL FP_RELAXED
+DO I = 1, N
+   A(I) = SQRT(B(I) / C(I))
+END DO
+```
+
+- `FP_RELAXED` converts division and `SQRT` in that scope to
+  reciprocal-approximation + FMA sequences, the same as `-Kfp_relaxed`. It
+  may add rounding error relative to IEEE and can raise unexpected
+  floating-point exceptions under `-NRtrap`.
+- OCL lines are honoured only with `-Kocl` (the default unless `-Knoocl`
+  is given) and at `-O1` or higher.
+- In C/C++ **trad mode** the equivalents are pragmas with an explicit
+  scope: `#pragma procedure fp_relaxed` inside a function, `#pragma loop
+  fp_relaxed` before a loop, or `global`. **Clang mode (`-Nclang`) has no
+  per-loop form**; use the global option `-ffj-fp-relaxed`.
+- Other specifiers (SIMD, unrolling, recurrence hints and more) are listed
+  in the Fujitsu Fortran/C user's guides. Check the manual for the exact
+  spelling rather than guessing.
+
+To see what the compiler actually did with a loop, add
+`-Koptmsg=2 -Nlst=t`. frt then writes a listing that explains which loops
+were vectorised (SVE), unrolled or software-pipelined, and why not. If a
+hot loop still runs scalar after `-Kfast`, the listing tells you whether a
+directive or a source change is needed.
+
 ### Quick build example
 
 ```sh
@@ -212,6 +268,42 @@ Useful packages on Fugaku (`linux-rhel8-a64fx`):
 - `openmpi@5.0.8` (built with `gcc@15.1.0`)
 - `mpich-tofu@1.0` (Tofu-optimized MPICH)
 - `gcc@15.1.0` as a native aarch64 compiler
+
+### Native Spack GCC builds must run in a batch job
+
+The site's Spack GCCs (e.g. `gcc@12.2.0`, plus the Fujitsu-MPI wrappers
+for GCC under `/vol0004/apps/oss/mpigcc/fjmpi-gcc{8,10,11,12}`) are
+**A64FX-native**, not cross compilers. This is the one case where the
+"don't build on compute nodes" advice above does not apply. A `spack install`
+of a GCC + Fujitsu-MPI stack has to run inside a `pjsub` job:
+
+- `arm1` (the Arm login node) is **not** a substitute. It runs glibc 2.17, so
+  the RHEL 8-built GCC fails with `GLIBC_2.25 not found`. It also has no
+  internet access, and the site's Fujitsu-built Spack Python fails there.
+- Concretize and `spack fetch` on an **x86 login node** (it has internet;
+  set `concretizer:targets:host_compatible:false` and require
+  `target=a64fx`). Then run `spack install` in an `f-pt`/`small` job.
+- Inside the job set `TMPDIR=/tmp` and put the Spack build stage there.
+  `$PJM_LOCALTMP` has zero capacity by default (see the
+  `fugaku-submitting-jobs` storage notes), and `config.guess` fails with
+  "No space left on device". Compute-node `/tmp` is per-node-group NFS and
+  survives the job, so remove your stage directory **in the same job**.
+- Keep stages and caches off the group data volume (see the inode note in
+  `fugaku-submitting-jobs`). Unpacking sources there can fail with "Disk
+  quota exceeded".
+- Re-concretize after editing any recipe: Spack hashes include the
+  `package.py` content.
+- Give `spack install` a generous elapse limit. Configure-heavy packages
+  are slow on compute nodes, and their timing varies a lot between runs.
+
+### libgomp needs `OMP_WAIT_POLICY=active` for fine-grained OpenMP
+
+GCC-built OpenMP codes with many short parallel regions can run several
+times slower than expected under libgomp's default passive wait, because
+idle threads sleep between regions. Set `OMP_WAIT_POLICY=active` in every
+job running a GCC/libgomp binary before comparing it with a Fujitsu build.
+Thread binding (`OMP_PROC_BIND`/`OMP_PLACES`) does not substitute for it.
+The Fujitsu OpenMP runtime already spins by default.
 
 **Login-node limitation:** Spack OpenMPI's `mpicxx` is an **aarch64 binary**. On the x86_64 login node it fails with:
 
@@ -462,6 +554,24 @@ Plan log-gathering scripts accordingly.
 
 ---
 
+## Profiling on compute nodes with `perf`
+
+`perf` works inside jobs (`perf_event_paranoid` is 1), but **the hardware
+`cycles` event records no samples** on these nodes: the run looks fine and
+`perf report` is empty. Use the software clock event:
+
+```sh
+perf record -q -e cpu-clock -F 199 -o "perf.${OMPI_COMM_WORLD_RANK:-0}.data" -- ./app
+```
+
+Wrap the application, not `mpiexec`: put that line in a small per-rank
+script and launch it with `mpiexec -n N ./wrapper.sh ./app`. A low sampling
+rate like 199 Hz keeps the overhead small. Run `perf report --stdio
+--sort dso,symbol` and `perf annotate --stdio -s <symbol>` **inside the job**,
+where the binary and its libraries are visible. `kptr_restrict` warnings
+are harmless. frt OpenMP regions show up as `<routine>._OMP_<n>_`, and
+libgomp ones as `<routine>_._omp_fn.<n>`.
+
 ## Build diagnostics checklist
 
 1. `mpicxx -show` — confirm the real compiler being invoked.
@@ -473,5 +583,4 @@ Plan log-gathering scripts accordingly.
 7. If `pjsub` refuses to submit after a successful build, check the CWD and use `--no-check-directory`.
 8. If a binary seems to run but only one hostname appears in output — MPI may have silently collapsed to localhost. Verify with `mpiexec -n <N>` on multiple nodes.
 9. Keep CPU and GPU build directories separate; stale CMake flags can silently leak between builds.
-
-Base directory for this skill: /Users/wddawson/Documents/FugakuNEXT/fugaku-sbd/.claude/skills/fugaku-build
+10. If a Fortran program with a C `main` fails to link under `mpifrtpx` — add `-mlcmain=main` to the **final link only**, not to every compile/configure test.

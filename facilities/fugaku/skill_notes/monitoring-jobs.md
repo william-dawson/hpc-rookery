@@ -31,6 +31,24 @@ find . -path "*output.<jobid>*" -name "stdout*" | sort
 `run_command_on_cluster(facility="{{SLUG}}", ...)`, then read what it finds
 with `fs_view`/`fs_tail`.
 
+A shell redirect on `mpiexec` (`mpiexec -n 48 ./app > app.out`) captures
+**nothing** from the ranks. To put rank output somewhere predictable, use
+Fujitsu MPI's own options:
+
+```sh
+mpiexec -n 48 -stdout-proc run.rankout -stderr-proc run.rankerr ./app
+cat run.rankout.*.0 > run.out      # files are <prefix>.<seq>.<rank>
+```
+
+## Exit code 137 is usually out of memory
+
+An A64FX node has **32 GiB** of HBM2 shared by all its ranks. A run that
+dies with return code 137 (SIGKILL), with no error message from the
+program, was most likely killed for exceeding it. Pure-MPI layouts (48
+ranks per node) duplicate per-rank data the most and hit this first. Check
+the per-rank memory estimate before blaming the code, and fall back to
+fewer ranks with more threads (e.g. 4×12).
+
 ## `ERR` before the job ever starts
 
 A job that goes to `ERR` with **no output file and no start date** was
