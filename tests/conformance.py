@@ -2051,7 +2051,40 @@ def check_repo() -> None:
     check("at least one facility is registered", facilities_exist)
     check("unknown facility errors clearly, listing valid slugs", unknown_facility_errors_clearly)
     check("slugs are lowercase and safe", slugs_are_url_and_identifier_safe)
+    def no_shipped_path_is_gitignored():
+        """Nothing under facilities/ or plugins/ may be matched by .gitignore.
+
+        An unanchored "build/" rule once swallowed
+        facilities/fugaku/skills/build/ — a facility may legitimately name a
+        custom skill "build", and the tracked SKILL.md inside kept working,
+        so the only symptom was that a *new* file there could never be
+        staged. `git add` warns and exits non-zero; nothing else notices.
+        Both directories hold hand-written content and generator output, so
+        a silently ignored path there loses work either way.
+        """
+        root = pathlib.Path(__file__).resolve().parent.parent
+        if not (root / ".git").exists():
+            return                      # not a checkout (e.g. inside a wheel)
+        candidates = [str(p.relative_to(root))
+                      for top in ("facilities", "plugins")
+                      for p in (root / top).rglob("*")
+                      if p.is_file() and "__pycache__" not in p.parts]
+        assert candidates, "found no shipped files to check"
+        proc = subprocess.run(
+            ["git", "check-ignore", "--stdin"],
+            input="\n".join(candidates), capture_output=True, text=True,
+            cwd=root,
+        )
+        # git check-ignore exits 0 when it matched something, 1 when nothing
+        # matched; 1 is the outcome we want.
+        ignored = [line for line in proc.stdout.splitlines() if line.strip()]
+        assert not ignored, (
+            "these shipped paths are matched by .gitignore, so new files "
+            "beside them would be silently skipped: " + ", ".join(ignored[:5])
+        )
+
     check("fs_rm refuses home/root paths", fs_rm_refuses_dangerous_paths)
+    check("no shipped path is gitignored", no_shipped_path_is_gitignored)
     check("job names cannot inject into scripts", job_name_cannot_inject_into_scripts)
     check("resource quantities are positive", resource_quantities_are_positive)
     check("process_count does not conflict with default tasks-per-node",
