@@ -107,6 +107,70 @@ were vectorised (SVE), unrolled or software-pipelined, and why not. If a
 hot loop still runs scalar after `-Kfast`, the listing tells you whether a
 directive or a source change is needed.
 
+### `-Kfast` numerical hazards (seen in a production code)
+
+These came out of validating Yambo (GW/BSE, Fortran) at `-Kfast` against
+`-O2` and GCC builds. Each one gave plausible-looking but wrong results.
+
+- **`fp_relaxed` turns `1/Inf` into NaN.** Relaxed division is a reciprocal
+  estimate plus Newton steps, and that sequence gives NaN for an infinite
+  divisor where IEEE gives 0. Code that lets `exp` overflow on purpose, such
+  as Fermi/Bose factors `1/(1+exp(x))` or `1/(exp(x)-1)`, then produces NaN.
+  We saw an all-NaN finite-temperature result, and "Not enough states to
+  converge the Fermi Level" for a metal. Fix it in the source: cap the
+  argument (`exp(min(x,80._SP))`). That is also correct under IEEE.
+- **Small, systematic shifts.** Relaxed arithmetic in one module that
+  converts k/q/G vectors between units (divisions by the lattice constant,
+  a `sqrt` for the norm) shifted the quasiparticle energies of a metal by
+  0.2 meV. `-O2` and GCC agreed with each other to 1e-6 eV. Nothing crashed,
+  and the semiconductor tests matched exactly.
+- **Turning it off for one unit needs two OCL specifiers.** `!OCL
+  NOFP_RELAXED` alone restored the exact divisions but left the FMA
+  contractions, and the shift remained. This fixed it with no measurable
+  cost, compiled with `-Kocl`:
+
+  ```fortran
+  !OCL NOFP_RELAXED,NOFP_CONTRACT
+  module vec_operate
+  ```
+
+  An OCL line placed before a `module` statement covers the whole module.
+  Comment lines survive a `-Cpp` preprocessing step; check the preprocessed
+  file if the build has its own cpp stage.
+- **Find the unit by relinking, not by rebuilding.** Recompile one source
+  directory (then one file) at `-O2` against the `-Kfast` build's own module
+  files, relink into a separate `bin`, and run one large job per variant.
+  To narrow the field before spending a job, compare the `-S` output of
+  the two flag sets: counts of `fdiv`/`fsqrt` versus `frecpe`/`frsqrte`,
+  and of `fmadd`/`fmsub`. Only files whose counts change are candidates.
+- **`-Ksimd=2` on a whole build can crash** (SIGSEGV). It vectorises loops
+  with IFs by executing both branches, so a guarded gather such as
+  `if (ig > n) cycle; x = table(ig)` reads past the end of `table`. That is
+  documented `-Ksimd=2` behaviour, not a bug in the code. Use it per file,
+  only where speculation is safe. `!OCL SIMD` does **not** request the same
+  IF-conversion: a loop rejected with "there are IF statements in the loop"
+  stays scalar.
+- **`collapse(2)` can block vectorisation.** frt rebuilds both indices of a
+  collapsed OpenMP loop with an SVE integer divide for every element. In
+  one hot loop that took about 40% of the time. Dropping `collapse(2)` and
+  parallelising only the outer loop let the inner one vectorise and be
+  software pipelined. The whole region ran about 4× faster, with no
+  load-balance penalty even at about 2 outer iterations per thread.
+  `-Kopenmp_collapse_except_innermost` did not combine with `-Ksimd=2`.
+- Option spelling: `-Ksimd_nopacked_promotion` (not
+  `-Knosimd_packed_promotion`, which only gives a warning and is ignored).
+
+### Run-time checking builds (`-H`)
+
+`-Haefosu` (argument, shape, bounds, overlap, undefined values; implies
+`-O0`) objects can be linked with normally optimised objects. **`-Hx` cannot
+be mixed:** it changes the module data layout, so every unit that uses a
+`-Hx`-compiled module must also be `-Hx`. A mixed link built fine and then
+failed with "undefined" checks on correctly set components and a SIGSEGV in
+`MPI_Comm_size`. Whole-program `-H` builds of a large code can be too slow to
+reach the code you care about; recompiling only the suspect directories at
+`-O0 -Haefosu` against the optimised build's modules works.
+
 ### Quick build example
 
 ```sh
@@ -529,6 +593,42 @@ export LD_LIBRARY_PATH="/vol0004/apps/oss/gcc-arm-11.2.1/aarch64-linux-gnu/lib64
 ```
 
 The GCC cross compiler's own `libgcc_s`/`libstdc++` are typically compatible with the compute-node system libraries — the binary's ELF `RPATH`/`RUNPATH` or default search order picks them up automatically. Explicitly overriding with the GCC cross `lib64` is what breaks `mpiexec`.
+
+### SSL2 BLAS results depend on the data address
+
+SSL2 `zdotc` is accurate, but not bitwise reproducible: the same vectors at a
+different memory alignment gave a result differing in the last bits in
+about 80% of cases (same address: always identical; any thread count). Code
+that repeats a computation on several ranks and assumes they agree
+bitwise can drift apart, and an iterative method (Lanczos/Haydock) amplifies
+it into a wrong answer that changes from run to run and with the rank count.
+Symptom: runs on one MPI rank are correct and runs on several ranks are
+wrong, with OpenMP on or off, while OpenBLAS builds are fine. Fix: compute
+on one rank and broadcast the result, or reduce it, so all ranks use
+identical values.
+
+### Fujitsu FFTW
+
+The site Spack has `fujitsu-fftw` 1.1.0 (A64FX-tuned FFTW3 API, `+openmp
++mpi`, Fujitsu compiler and MPI). It is a drop-in replacement for
+`fftw@3.3.10` at link time. Relinking one code against it made the FFT-heavy
+phase 23% faster, with identical results.
+
+### RPATH beats `LD_LIBRARY_PATH`
+
+A binary linked with `-rpath` (as Spack and most build systems do) keeps
+loading the libraries from its RPATH even if `LD_LIBRARY_PATH` lists another
+version first. Swapping in a different MPI or BLAS runtime therefore needs a
+relink; check with `ldd` inside the job (on a compute node: `ldd` of a cross
+binary fails on the login node).
+
+### OpenMP stack size for native `mpifrt` programs
+
+A small Fortran MPI+OpenMP test built with native `mpifrt -Kopenmp`
+segfaulted at 12 threads with the default stack, and with `OMP_STACKSIZE=64M`.
+`OMP_STACKSIZE=1G` fixed it. How much is needed depends on what the OpenMP
+regions put on the thread stacks (automatic arrays, private copies), so try
+a larger value when a threaded run crashes and a 1-thread run does not.
 
 ### Fortran preprocessor directives (`#ifdef`)
 
