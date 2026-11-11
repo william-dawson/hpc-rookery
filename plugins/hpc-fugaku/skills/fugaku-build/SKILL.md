@@ -556,8 +556,17 @@ Plan log-gathering scripts accordingly.
 
 ## Profiling
 
-Fujitsu's tools come with TCS (`fipp`, `fapp` on compute nodes; `fipppx`,
-`fapppx` for post-processing on the x86 login nodes). Pick by question:
+Fujitsu's tools come with TCS. Measurement happens on a compute node with
+`fipp`/`fapp`; post-processing happens on the x86 login nodes with
+`fipppx`/`fapppx`. **The native commands do not exist on the login node at
+all** — verified on toolchain 1.2.43, where `/opt/FJSVxtclanga/tcsds-1.2.43/
+bin/` carries only `fipppx` and `fapppx`. A login-node measurement attempt
+therefore dies with a bare `command not found`, which is the usual reason a
+profiling attempt fails instantly. (`fipp`/`fapp` can also format their own
+output on a compute node with `-A` in place of `-C`; the two are mutually
+exclusive.)
+
+Pick by question:
 
 | Question | Tool | Needs source changes? |
 |---|---|---|
@@ -576,12 +585,34 @@ fipp -C -Icpupa,mpi,call -d ./fipp_data ./app        # compute node
 fipppx -A -Icall,cpupa,mpi,src -ttext -o fipp.txt -d ./fipp_data   # login node
 ```
 
+- Set `FLIB_FASTOMP` to a true value, or `fipp` does not behave correctly.
+- `-d` must name a new or empty directory, so version the name rather than
+  reusing it. Give it an absolute path if the program changes its own
+  working directory while running.
+- Sampling needs roughly a second of runtime as a floor; below that `fipp`
+  cannot measure at all.
 - Builds with link-time optimisation (`-Klto`/`-flto`) lose call-graph and
   per-line accuracy; profile without it.
 - At scale, restrict post-processing to a few ranks with `-p` (e.g.
   `-p0,1`) and add `-Inompi` if MPI data is not needed.
 - Samples shown as `__?unknown` did not map to a procedure; change the
   sampling interval (`fipp -C -i …`).
+
+**The interval you ask for is not the interval you get**, which is why
+nudging `-i` by a little often changes nothing. Sampling is pinned to the OS
+timer interrupt — roughly 11–14 ms depending on noise suppression — and the
+request is rounded to a multiple of it. At a 14 ms tick, both `-i 10` and
+`-i 25` give 14 ms, and `-i 100` gives 98 ms. Move it in multiples of the
+tick, or not at all. Defaults and ranges: `-i` 100 ms (10–3600000), `-l` 0
+meaning every procedure (0–2147483647), `-m` 3000 KB of per-thread work
+buffer (1–2147483).
+
+If a run ends with this, that buffer was too small — raise `-m` to at least
+the figure it names and measure again:
+
+```
+fipp: work memory overflowed. specify memsize or more to -m option and retry.
+```
 
 ### Region counters and FLOP rates: `fapp`
 
@@ -610,6 +641,11 @@ peak**, divide FLOP/s by the A64FX peak: 48 cores × 32 double-precision
 flop/cycle × clock (≈3.07 TFLOP/s per node at 2.0 GHz). Never pass
 `-Inocpupa` at collection: it disables `-Hevent`.
 
+**Bind threads to cores one-to-one before trusting counter data.** An
+unbound run still produces numbers, but they cannot be attributed. For a
+non-threaded MPI program use a VCOORD file with `core=1` for every process;
+for a program that is neither threaded nor MPI, `taskset` or `numactl`.
+
 Running `fapp -C` on an un-instrumented program does not give a
 whole-program profile: in testing it ended with "fapp: The profiling data
 is not correctly generated" and wrote no data (seen both when wrapping each
@@ -619,11 +655,29 @@ MPI rank and when wrapping the whole `mpiexec` launch). Use `fipp` for that.
 
 For the full hardware picture, run the same instrumented program several
 times, one event set per run, each into its own directory: `pa1` alone for
-the single-page report, `pa1`–`pa5` for the brief one, up to `pa1`–`pa17`
-for the detailed one. Export each with `fapppx -A -tcsv -d ./rep<N> -o
-rep<N>.csv` and load the CSVs into Fujitsu's `cpu_pa_report.xlsm` Excel
-macro on a desktop. At large rank counts, limit the export with `-p` or the
-CSV may exceed Excel's row limit.
+the single-page report, `pa1`–`pa5` for the brief one, `pa1`–`pa11` for the
+standard one, up to `pa1`–`pa17` for the detailed one. **That is 1, 5, 11 or
+17 executions of the same program** — on Fugaku, billed node-hours each, so
+say which tier is intended before promising a report.
+
+Export each with `fapppx -A -tcsv -d ./rep<N> -o rep<N>.csv` and load the
+CSVs into Fujitsu's `cpu_pa_report.xlsm` Excel macro on a desktop. At large
+rank counts, limit the export with `-p` or the CSV may exceed Excel's row
+limit.
+
+Practical notes on that last step:
+
+- The workbook lives on the login node, confirmed present at
+  `/opt/FJSVxtclanga/tcsds-1.2.43/misc/cpupa/cpu_pa_report.xlsm`.
+- It reads **only** files named `pa1.csv` through `pa17.csv`, from its own
+  directory, and picks the tier from which ones it finds — so a missing
+  `pa7.csv` quietly demotes a standard report. Name the exports to match.
+- It is macro-driven, so macros must be enabled. Fujitsu records verifying
+  it on Windows 11 with 64-bit Excel for Microsoft 365, and on macOS
+  Catalina.
+- **Do not save the workbook after it reads data**; a saved copy will not
+  read a fresh set. Keep a pristine copy and work from duplicates.
+- It does not support dynamically spawned processes.
 
 ### `perf` (sampling and annotation)
 
@@ -642,6 +696,62 @@ rate like 199 Hz keeps the overhead small. Run `perf report --stdio
 where the binary and its libraries are visible. `kptr_restrict` warnings
 are harmless. frt OpenMP regions show up as `<routine>._OMP_<n>_`, and
 libgomp ones as `<routine>_._omp_fn.<n>`.
+
+### Where these profiling facts come from
+
+The `perf` behaviour, the un-instrumented `fapp` failure and the percent-of-
+peak figure come from profiling sessions on Fugaku. The command locations and
+the workbook path were checked live against toolchain 1.2.43. The flag
+semantics, option ranges, event-set numbering and the conditions below are
+recorded from Fujitsu's Profiler User's Guide for Technical Computing Suite
+V4.0L20 (J2UL-2568-01ENZ0, September 2025) without being individually
+exercised — reliable for what a flag means, worth confirming the first time a
+behavioural claim matters. Ranges and event numbering can move between TCS
+releases.
+
+### Conditions that quietly invalidate a measurement
+
+Check these before blaming the tool. Most produce no error at all — just
+data that is wrong, or absent.
+
+**Job shape.** A node-sharing job may measure incorrectly or not at all; for
+MPI under node sharing the measurement fails and takes the program with it.
+Profile in a job with whole nodes.
+
+**How it was built.** Position-independent executables (`-fpie`, `-fPIE`)
+cannot be measured correctly. C and C++ need `-O1` or higher for `fipp`. Do
+not `strip` the executable, nor any shared library whose cost you want
+attributed. If you set `-rpath` or `LD_RUN_PATH`, keep the toolchain's own
+`lib64` out of `DT_RPATH` — `readelf -d` shows it, and its presence breaks
+`fipp` measurement.
+
+**What the program does.** Spawning processes via `fork`, `vfork`, `popen`
+or `system` prevents correct measurement. The profilers hook MPI calls, so
+they cannot coexist with the MPI profiling interface: a program using it
+reports as non-MPI and `fipp` collapses every rank to `Process0`.
+
+**Environment.** `LD_PRELOAD` breaks both tools; leave it unset. Variables
+beginning `FIPP_`, `FAPP_`, `PROF_`, `FJPROF_` or `FPROF_` belong to the
+profilers — do not set them. If you pass `mpiexec -x LD_LIBRARY_PATH=…`,
+the profiler's own library directory has to come first in that value or the
+hooks never load.
+
+**Thread model.** Only Fujitsu automatic parallelisation and OpenMP are
+measured. Raw pthreads are invisible, so a pthread-parallel code looks
+single-threaded.
+
+**Mixed-language MPI.** Linking Fortran with C/C++ needs an extra library:
+`-lfjprofmpif` when linking with `mpifccpx` or `mpiFCCpx`, `-lfjprofmpi`
+with `mpifrtpx`.
+
+**Exit status.** Under a profiler the reported exit status may be the
+profiler's rather than the program's — do not use it to judge whether the
+application itself succeeded.
+
+When reporting profiling results, say which tool produced them, the
+*effective* sampling interval rather than the requested one, and whether
+threads were bound. If a run hit any condition above, say so instead of
+presenting the output as clean.
 
 ## Build diagnostics checklist
 

@@ -1,7 +1,7 @@
 {
   "name": "hpc-fugaku",
   "description": "Facility-specific HPC workflow skills for Fugaku. Install the hpc base plugin first for MCP tools.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "William Dawson",
     "email": "william.dawson@riken.jp"
