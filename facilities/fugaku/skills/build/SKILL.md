@@ -91,8 +91,11 @@ END DO
   reciprocal-approximation + FMA sequences, the same as `-Kfp_relaxed`. It
   may add rounding error relative to IEEE and can raise unexpected
   floating-point exceptions under `-NRtrap`.
-- OCL lines are honoured only with `-Kocl` (the default unless `-Knoocl`
-  is given) and at `-O1` or higher.
+- OCL lines are honoured only with `-Kocl` and at `-O1` or higher.
+  **`frtpx` defaults to `-Knoocl`**, so without `-Kocl` every `!OCL` line is
+  silently ignored: no warning, and the generated code does not change (the
+  man page and the Fortran User's Guide, OCL chapter, both say so). Check
+  that a directive took effect with `-S` or the `-Nlst=t` listing.
 - In C/C++ **trad mode** the equivalents are pragmas with an explicit
   scope: `#pragma procedure fp_relaxed` inside a function, `#pragma loop
   fp_relaxed` before a loop, or `global`. **Clang mode (`-Nclang`) has no
@@ -582,9 +585,18 @@ node:
 
 ```sh
 fipp -C -Icpupa,mpi,call -d ./fipp_data ./app        # compute node
+fipp -C -Icpupa,mpi,call -d ./fipp_data mpiexec -n 4 ./app   # MPI: wrap the launch
 fipppx -A -Icall,cpupa,mpi,src -ttext -o fipp.txt -d ./fipp_data   # login node
 ```
 
+- **For MPI programs, wrap the whole launch** as above. Putting `fipp`
+  inside it (`mpiexec -n 4 fipp -C … ./app`) ends with "fipp: profiling
+  data is invalid". Tested on a 4-rank Fortran program.
+- If MPI is initialised from a C `main` (`MPI_Init` in C), link with
+  `-lfjprofmpi`. Without it the profile still works but reports
+  "Type of program: SERIAL" and has no MPI data.
+- The report header gives the CPU clock the job ran at; use it for percent
+  of peak (below).
 - Set `FLIB_FASTOMP` to a true value, or `fipp` does not behave correctly.
 - `-d` must name a new or empty directory, so version the name rather than
   reusing it. Give it an absolute path if the program changes its own
@@ -638,7 +650,9 @@ fapppx -A -Icpupa,mpi -ttext -o fapp_pa1.txt -d ./fapp_pa1   # login node
 Event set `pa1` (or `statistics`) gives the headline numbers: FLOP/s,
 memory throughput, SIMD instruction rate and IPC. To get **percent of
 peak**, divide FLOP/s by the A64FX peak: 48 cores × 32 double-precision
-flop/cycle × clock (≈3.07 TFLOP/s per node at 2.0 GHz). Never pass
+flop/cycle × clock: 3.07 TFLOP/s per node at 2.0 GHz, 3.38 at 2.2 GHz.
+The clock is not fixed: `fipp` reported 2200 MHz in `f-pt` jobs, so read it
+from the profile header rather than assuming 2.0 GHz. Never pass
 `-Inocpupa` at collection: it disables `-Hevent`.
 
 **Bind threads to cores one-to-one before trusting counter data.** An
@@ -646,10 +660,16 @@ unbound run still produces numbers, but they cannot be attributed. For a
 non-threaded MPI program use a VCOORD file with `core=1` for every process;
 for a program that is neither threaded nor MPI, `taskset` or `numactl`.
 
-Running `fapp -C` on an un-instrumented program does not give a
-whole-program profile: in testing it ended with "fapp: The profiling data
-is not correctly generated" and wrote no data (seen both when wrapping each
-MPI rank and when wrapping the whole `mpiexec` launch). Use `fipp` for that.
+Running `fapp -C` on a large un-instrumented MPI code (Yambo) ended with
+"fapp: The profiling data is not correctly generated" and wrote no data.
+Do not read that as "fapp needs regions": `fipp` gave the same message on
+every Yambo executable, even for `yambo -h` and for GCC and stripped
+builds, while it worked on small Fortran and C-`main` MPI programs. Fujitsu
+documents the message as "the file format of the executable file is
+incorrect", or more generally "the program did not end normally". The cause
+for that code was never found. If `fipp` also fails on a program, the
+problem is the program and `perf` is the fallback; for a whole-program
+profile of a normal program, use `fipp`.
 
 ### CPU Performance Analysis Report
 
@@ -699,8 +719,9 @@ libgomp ones as `<routine>_._omp_fn.<n>`.
 
 ### Where these profiling facts come from
 
-The `perf` behaviour, the un-instrumented `fapp` failure and the percent-of-
-peak figure come from profiling sessions on Fugaku. The command locations and
+The `perf` behaviour, the `fapp`/`fipp` failure on Yambo, the `fipp` MPI
+placement, the `-lfjprofmpi` effect and the clock come from profiling
+sessions on Fugaku. The command locations and
 the workbook path were checked live against toolchain 1.2.43. The flag
 semantics, option ranges, event-set numbering and the conditions below are
 recorded from Fujitsu's Profiler User's Guide for Technical Computing Suite
