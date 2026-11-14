@@ -107,6 +107,9 @@ pi/                    The Pi harness target: an extension that registers
                         the MCP servers and contributes skill packs per the
                         user's /hpc selection; root package.json is its
                         Pi-package manifest.
+opencode/              The OpenCode harness target: a plugin that registers
+                        the MCP servers and contributes the skill packs
+                        named in its plugin options; see opencode/README.md.
 templates/skills/       Shared per-workflow skill templates (the mechanics
                         every facility has identically) — not per-facility.
 scripts/                render_facility_tables.py (facility table codegen),

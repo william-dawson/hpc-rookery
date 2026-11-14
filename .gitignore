@@ -4,6 +4,7 @@
 .pytest_cache/
 .venv/
 __pycache__/
+opencode/node_modules/
 # Anchored to the repo root on purpose. Unanchored, "build/" matches a
 # directory of that name at any depth, which silently swallowed
 # facilities/fugaku/skills/build/ — a facility may legitimately name a

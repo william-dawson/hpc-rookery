@@ -1,0 +1,20 @@
+{
+  "name": "hpc-rookery-opencode",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for hpc-rookery: registers the hpc and hpc-docs MCP servers and contributes the selected facility skill packs.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
