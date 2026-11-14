@@ -4,15 +4,18 @@
  * Registers the two MCP servers every facility shares — the same
  * `uv tool run --from git+...` command plugins/hpc/.mcp.json gives Codex and
  * Claude Code and pi/extension.ts gives Pi — and contributes the Agent
- * Skills-format facility skill packs selected through plugin options. The
- * Python servers stay the single engine; this file never reimplements a
+ * Skills-format facility skill packs for the facilities selected with /hpc.
+ * The Python servers stay the single engine; this file never reimplements a
  * tool.
  *
- * Options (object form in opencode.json, read via ctx.options):
- *   facilities: string[]  slugs whose skill packs to load (default: none —
- *                         the shared hpc-facilities skill always loads)
- *   gitRef: string        the `uv --from` requirement for both servers
- *                         (default: git+...@main; override to test a branch)
+ * Facility selection, in precedence order:
+ *   1. plugin storage, set by /hpc (persists across sessions)
+ *   2. the `facilities` plugin option (the initial selection)
+ *   3. none — only the shared hpc-facilities skill loads
+ *
+ * Other options (object form in opencode.json, read via ctx.options):
+ *   gitRef: string  the `uv --from` requirement for both servers
+ *                   (default: git+...@main; override to test a branch)
  *
  * No client-side argument rule is needed here, unlike Pi: OpenCode does not
  * pre-validate MCP tool arguments against the server's schema, and the
@@ -27,7 +30,11 @@ import { Plugin, Skill, type Mcp } from "@opencode/plugin";
 /** Same default install ref as every other harness target in this repo. */
 const PKG_REF_DEFAULT = "git+https://github.com/william-dawson/hpc-rookery.git@main";
 
-/** The plugin always lives at <repo>/opencode/src/index.ts in this checkout. */
+/**
+ * The plugin lives at <repo>/opencode/src/index.ts, whether that repo is a
+ * checkout (local path config) or an installed git package (the whole
+ * repository is the npm package — see the root package.json).
+ */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 interface Facility {
@@ -35,7 +42,7 @@ interface Facility {
 	display_name: string;
 }
 
-/** Read facilities/<slug>/facility.json — packaged data in every checkout. */
+/** Read facilities/<slug>/facility.json — packaged data in every copy. */
 function discoverFacilities(): Map<string, Facility> {
 	const dir = join(repoRoot, "facilities");
 	const known = new Map<string, Facility>();
@@ -95,30 +102,41 @@ export default Plugin.define({
 	id: "hpc-rookery",
 	async setup(ctx) {
 		const options = ctx.options as { facilities?: unknown; gitRef?: unknown };
-		const facilities = Array.isArray(options.facilities)
-			? options.facilities.filter((slug): slug is string => typeof slug === "string")
-			: [];
 		const gitRef =
 			typeof options.gitRef === "string" && options.gitRef.trim()
 				? options.gitRef.trim()
 				: PKG_REF_DEFAULT;
 
-		// Fail loud on a config typo, and on a plugin copy that lost the repo
-		// layout it reads skills and facilities from.
 		const known = discoverFacilities();
-		if (known.size === 0 && facilities.length > 0) {
+		const available = [...known.keys()].sort();
+
+		// Fail loud on a config typo, and on a copy that lost the repo
+		// layout it reads skills and facilities from.
+		const optionFacilities = Array.isArray(options.facilities)
+			? options.facilities.filter((slug): slug is string => typeof slug === "string")
+			: [];
+		if (known.size === 0 && optionFacilities.length > 0) {
 			throw new Error(
 				"hpc-rookery plugin: facilities/ not found next to the plugin — " +
-					"it must load from a full checkout (local path), not a bare copy",
+					"it must load from a full checkout or a repository install, not a bare copy",
 			);
 		}
-		const unknown = facilities.filter((slug) => !known.has(slug));
-		if (unknown.length > 0) {
+		const unknownOption = optionFacilities.filter((slug) => !known.has(slug));
+		if (unknownOption.length > 0) {
 			throw new Error(
-				`hpc-rookery plugin: unknown facility slug(s): ${unknown.join(", ")} — ` +
-					`valid: ${[...known.keys()].sort().join(", ")}`,
+				`hpc-rookery plugin: unknown facility slug(s): ${unknownOption.join(", ")} — ` +
+					`valid: ${available.join(", ")}`,
 			);
 		}
+
+		// The /hpc choice, persisted in plugin storage, overrides the
+		// initial option. Transforms re-read this on every reload.
+		let selected: string[] | undefined = undefined;
+		const stored = await ctx.storage.get("facilities");
+		if (Array.isArray(stored)) {
+			selected = stored.filter((slug): slug is string => typeof slug === "string" && known.has(slug));
+		}
+		const selectedFacilities = (): string[] => selected ?? optionFacilities;
 
 		const server = (entry: string): Mcp.ServerConfig => ({
 			type: "local",
@@ -138,9 +156,61 @@ export default Plugin.define({
 				editor.set("hpc-docs", server("hpc-docs-mcp"));
 			}),
 			await ctx.skill.transform((editor) => {
-				for (const skill of skillEntries(["hpc", ...facilities.map((slug) => `hpc-${slug}`)])) {
+				for (const skill of skillEntries(["hpc", ...selectedFacilities().map((slug) => `hpc-${slug}`)])) {
 					editor.add(skill);
 				}
+			}),
+			await ctx.command.transform((editor) => {
+				editor.add({
+					name: "hpc",
+					description: "Set the HPC facility skill packs: /hpc <slug>[,<slug>...], /hpc clear, /hpc to list",
+					execute: async ({ sessionID, prompt, delivery }) => {
+						const reply = (text: string) =>
+							ctx.session.prompt({ ...prompt, sessionID, text, delivery });
+						const args = prompt.text.trim();
+
+						if (known.size === 0) {
+							await reply(
+								"The hpc-rookery plugin cannot find facilities/ next to itself — " +
+									"it needs a full repository install. Tell the user to reinstall it.",
+							);
+							return;
+						}
+						if (args === "") {
+							const current = selectedFacilities();
+							await reply(
+								`HPC facility skill packs currently loaded: ${current.length > 0 ? current.join(", ") : "(none)"}.\n` +
+									`Available facilities: ${available.join(", ")}.\n` +
+									"Report this to the user; no other action is needed.",
+							);
+							return;
+						}
+
+						let slugs: string[];
+						if (args === "clear") {
+							slugs = [];
+						} else {
+							slugs = [...new Set(args.split(/[,\s]+/).filter(Boolean))];
+							const unknown = slugs.filter((slug) => !known.has(slug));
+							if (unknown.length > 0) {
+								await reply(
+									`Unknown facility slug(s): ${unknown.join(", ")} — valid: ${available.join(", ")}. ` +
+										"Report this to the user; nothing was changed.",
+								);
+								return;
+							}
+						}
+
+						selected = slugs;
+						await ctx.storage.set("facilities", slugs);
+						await ctx.skill.reload();
+						await reply(
+							slugs.length > 0
+								? `HPC facility skill packs are now set to: ${slugs.join(", ")} — the packs are loaded. Confirm this to the user.`
+								: "HPC facility skill packs cleared — only the shared hpc-facilities skill remains. Confirm this to the user.",
+						);
+					},
+				});
 			}),
 		];
 

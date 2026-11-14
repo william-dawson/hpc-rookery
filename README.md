@@ -110,24 +110,20 @@ limitations, and overrides.
 
 ### OpenCode
 
-Add the plugin from a checkout to your `opencode.json` (see
-`opencode/README.md`), listing the facilities you use:
+Install the plugin, then pick facilities in-session — no config editing:
 
-```jsonc
-{
-  "plugins": [
-    {
-      "package": "/path/to/hpc-rookery/opencode",
-      "options": { "facilities": ["rikyu"] }
-    }
-  ]
-}
+```sh
+opencode plugin add 'github:william-dawson/hpc-rookery#main'
 ```
 
-The plugin registers both MCP servers and contributes the shared
-`hpc-facilities` skill plus the selected facility packs. Unlike the
-marketplace packs, facility selection is a plugin option, not a separate
-install per facility.
+```text
+/hpc rikyu,tsubame
+```
+
+The whole repository is the plugin package (root `package.json`), so the
+git install carries the skill packs; `/hpc` persists the selection in
+plugin storage. Details, options, and the checkout-based alternative in
+`opencode/README.md`.
 
 ### Manual installation for any MCP-capable harness
 
