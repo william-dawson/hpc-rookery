@@ -41,6 +41,33 @@ same plugin, no install:
 (`npm install` inside `opencode/` once, for the `@opencode/plugin`
 dependency; OpenCode loads `src/index.ts` directly, no build step.)
 
+## Testing a branch
+
+`opencode plugin add 'github:william-dawson/hpc-rookery#<branch>'`
+installs that branch's plugin, and
+`opencode plugin remove 'github:william-dawson/hpc-rookery#<branch>'`
+removes it again. The MCP servers still follow the `gitRef` option
+(default `@main`) unless the branch pins its own ref, so to exercise
+server changes on an arbitrary branch, configure a checkout as a local
+path with the option pointing at the branch:
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "/path/to/hpc-rookery",
+      "options": {
+        "gitRef": "git+https://github.com/william-dawson/hpc-rookery.git@<branch>"
+      }
+    }
+  ]
+}
+```
+
+(Plugin options require the object form, which takes local paths — a git
+specifier inside `package` does not load in current OpenCode, so use
+`opencode plugin add` for git installs and this form for options.)
+
 ## Options
 
 | Option | Default | Meaning |
