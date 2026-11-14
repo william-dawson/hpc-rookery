@@ -108,6 +108,27 @@ The selection is stored per user in `~/.pi/agent/hpc-rookery.json`. See
 `pi/README.md` for exposure settings, the `fs_rm` confirmation gate, known
 limitations, and overrides.
 
+### OpenCode
+
+Add the plugin from a checkout to your `opencode.json` (see
+`opencode/README.md`), listing the facilities you use:
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "/path/to/hpc-rookery/opencode",
+      "options": { "facilities": ["rikyu"] }
+    }
+  ]
+}
+```
+
+The plugin registers both MCP servers and contributes the shared
+`hpc-facilities` skill plus the selected facility packs. Unlike the
+marketplace packs, facility selection is a plugin option, not a separate
+install per facility.
+
 ### Manual installation for any MCP-capable harness
 
 If the harness does not support plugins, register `hpc-mcp` and

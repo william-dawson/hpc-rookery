@@ -4,6 +4,7 @@
 .pytest_cache/
 .venv/
 __pycache__/
+opencode/node_modules/
 build/
 dist/
 dist_check/
