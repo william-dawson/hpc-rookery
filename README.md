@@ -5,7 +5,7 @@ working with multiple supercomputers. From
 your own computer, an AI coding agent can connect to a supported facility,
 inspect and transfer files, compile software, submit and monitor batch jobs,
 and search a guide written for that machine. It works with MCP-capable agent
-harnesses such as Claude Code, Codex, OpenCode, and Cline.
+harnesses such as Claude Code, Codex, OpenCode, Cline, and Pi.
 
 https://github.com/user-attachments/assets/770e1f11-01c7-48f3-8c89-70efc3722e95
 
@@ -89,6 +89,23 @@ marketplace at `.claude-plugin/marketplace.json`. Each package additionally
 has a portable OpenPlugin `plugin.json`; the base `hpc` package has its
 portable `mcp.json`. In every harness, install `hpc` first and only the
 facility packs the user selected.
+
+### Pi
+
+Pi reads this repository's root `package.json` as a package manifest and
+loads `pi/extension.ts`. Install once:
+
+```sh
+pi install git:github.com/william-dawson/hpc-rookery@main
+```
+
+The extension registers both MCP servers, always contributes the shared
+`hpc-facilities` skill, and contributes the facility packs you select with
+its `/hpc` command (space toggles, Enter applies; `/hpc set rikyu,fugaku`
+works non-interactively). The selection is stored per user in
+`~/.pi/agent/hpc-rookery.json`, and applying it reloads the session so the
+packs load. See `pi/README.md` for exposure settings, the `fs_rm`
+confirmation gate, and overrides.
 
 ### Manual installation for any MCP-capable harness
 

@@ -1,0 +1,28 @@
+{
+  "name": "hpc-rookery",
+  "version": "0.1.0",
+  "description": "Pi package for hpc-rookery: the unified multi-facility HPC MCP servers plus selectable per-facility skill packs. See pi/README.md.",
+  "keywords": [
+    "pi-package",
+    "hpc",
+    "mcp",
+    "slurm",
+    "pbs",
+    "supercomputer"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/william-dawson/hpc-rookery"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./pi/extension.ts"
+    ]
+  }
+}

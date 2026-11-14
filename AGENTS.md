@@ -103,6 +103,10 @@ hpc_mcp/                The unified server entry points; importing this
 plugins/hpc/            The base Codex plugin: .mcp.json and only the
                         shared hpc-facilities discovery skill.
 plugins/hpc-<slug>/     Generated skill-only Codex plugin for one facility.
+pi/                    The Pi harness target: an extension that registers
+                        the MCP servers and contributes skill packs per the
+                        user's /hpc selection; root package.json is its
+                        Pi-package manifest.
 templates/skills/       Shared per-workflow skill templates (the mechanics
                         every facility has identically) — not per-facility.
 scripts/                render_facility_tables.py (facility table codegen),
