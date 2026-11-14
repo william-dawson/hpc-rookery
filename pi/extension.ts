@@ -29,8 +29,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 
-/** Same install ref as plugins/hpc/.mcp.json — one source of truth per user. */
-const PKG_REF = "git+https://github.com/william-dawson/hpc-rookery.git@main";
+/**
+ * BRANCH-ONLY scaffolding — do not merge to main. Main's extension must
+ * keep installing the MCP servers from @main; this points them at this
+ * branch so a `pi install git:...@fix/inline-tool-schema-refs` test
+ * exercises the branch's schemas, not main's.
+ */
+const PKG_REF = "git+https://github.com/william-dawson/hpc-rookery.git@fix/inline-tool-schema-refs";
 
 /** The extension always lives at <repo>/pi/extension.ts, whatever loaded it. */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
