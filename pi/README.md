@@ -19,6 +19,16 @@ From a checkout, `pi -e ./pi/extension.ts` tries it for one session, or
 `pi install ./` installs the checkout persistently. Pi pins a git install
 to the ref you name; update with `pi update --extensions`.
 
+## Testing a branch or pinning a ref
+
+`pi install git:github.com/william-dawson/hpc-rookery@<ref>` pins the
+package to any branch, tag, or commit. The MCP servers follow whatever
+ref that ref's `pi/extension.ts` pins (`@main` on main) — a branch that
+changes server behavior pins its own ref in its extension while it is
+tested. Switch back with
+`pi install git:github.com/william-dawson/hpc-rookery@main`;
+`pi remove git:github.com/william-dawson/hpc-rookery@<ref>` uninstalls.
+
 ## What loads
 
 | Piece | Behavior |
