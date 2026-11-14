@@ -1,6 +1,6 @@
 ---
 name: fugaku-build
-description: Use when building, compiling, or linking software on Fugaku — choosing a compiler toolchain (Fujitsu vs LLVM vs GCC), MPI, BLAS/LAPACK, cross-compilation for A64FX, and verifying a build actually produces working parallel code.
+description: Use when building, compiling, linking or profiling software on Fugaku — choosing a compiler toolchain (Fujitsu vs LLVM vs GCC), MPI, BLAS/LAPACK, cross-compilation for A64FX, verifying a build actually produces working parallel code, and measuring where time goes (fipp, fapp, perf, percent of peak).
 user-invocable: true
 ---
 
@@ -91,8 +91,11 @@ END DO
   reciprocal-approximation + FMA sequences, the same as `-Kfp_relaxed`. It
   may add rounding error relative to IEEE and can raise unexpected
   floating-point exceptions under `-NRtrap`.
-- OCL lines are honoured only with `-Kocl` (the default unless `-Knoocl`
-  is given) and at `-O1` or higher.
+- OCL lines are honoured only with `-Kocl` and at `-O1` or higher.
+  **`frtpx` defaults to `-Knoocl`**, so without `-Kocl` every `!OCL` line is
+  silently ignored: no warning, and the generated code does not change (the
+  man page and the Fortran User's Guide, OCL chapter, both say so). Check
+  that a directive took effect with `-S` or the `-Nlst=t` listing.
 - In C/C++ **trad mode** the equivalents are pragmas with an explicit
   scope: `#pragma procedure fp_relaxed` inside a function, `#pragma loop
   fp_relaxed` before a loop, or `global`. **Clang mode (`-Nclang`) has no
@@ -106,6 +109,70 @@ To see what the compiler actually did with a loop, add
 were vectorised (SVE), unrolled or software-pipelined, and why not. If a
 hot loop still runs scalar after `-Kfast`, the listing tells you whether a
 directive or a source change is needed.
+
+### `-Kfast` numerical hazards (seen in a production code)
+
+These came out of validating Yambo (GW/BSE, Fortran) at `-Kfast` against
+`-O2` and GCC builds. Each one gave plausible-looking but wrong results.
+
+- **`fp_relaxed` turns `1/Inf` into NaN.** Relaxed division is a reciprocal
+  estimate plus Newton steps, and that sequence gives NaN for an infinite
+  divisor where IEEE gives 0. Code that lets `exp` overflow on purpose, such
+  as Fermi/Bose factors `1/(1+exp(x))` or `1/(exp(x)-1)`, then produces NaN.
+  We saw an all-NaN finite-temperature result, and "Not enough states to
+  converge the Fermi Level" for a metal. Fix it in the source: cap the
+  argument (`exp(min(x,80._SP))`). That is also correct under IEEE.
+- **Small, systematic shifts.** Relaxed arithmetic in one module that
+  converts k/q/G vectors between units (divisions by the lattice constant,
+  a `sqrt` for the norm) shifted the quasiparticle energies of a metal by
+  0.2 meV. `-O2` and GCC agreed with each other to 1e-6 eV. Nothing crashed,
+  and the semiconductor tests matched exactly.
+- **Turning it off for one unit needs two OCL specifiers.** `!OCL
+  NOFP_RELAXED` alone restored the exact divisions but left the FMA
+  contractions, and the shift remained. This fixed it with no measurable
+  cost, compiled with `-Kocl`:
+
+  ```fortran
+  !OCL NOFP_RELAXED,NOFP_CONTRACT
+  module vec_operate
+  ```
+
+  An OCL line placed before a `module` statement covers the whole module.
+  Comment lines survive a `-Cpp` preprocessing step; check the preprocessed
+  file if the build has its own cpp stage.
+- **Find the unit by relinking, not by rebuilding.** Recompile one source
+  directory (then one file) at `-O2` against the `-Kfast` build's own module
+  files, relink into a separate `bin`, and run one large job per variant.
+  To narrow the field before spending a job, compare the `-S` output of
+  the two flag sets: counts of `fdiv`/`fsqrt` versus `frecpe`/`frsqrte`,
+  and of `fmadd`/`fmsub`. Only files whose counts change are candidates.
+- **`-Ksimd=2` on a whole build can crash** (SIGSEGV). It vectorises loops
+  with IFs by executing both branches, so a guarded gather such as
+  `if (ig > n) cycle; x = table(ig)` reads past the end of `table`. That is
+  documented `-Ksimd=2` behaviour, not a bug in the code. Use it per file,
+  only where speculation is safe. `!OCL SIMD` does **not** request the same
+  IF-conversion: a loop rejected with "there are IF statements in the loop"
+  stays scalar.
+- **`collapse(2)` can block vectorisation.** frt rebuilds both indices of a
+  collapsed OpenMP loop with an SVE integer divide for every element. In
+  one hot loop that took about 40% of the time. Dropping `collapse(2)` and
+  parallelising only the outer loop let the inner one vectorise and be
+  software pipelined. The whole region ran about 4× faster, with no
+  load-balance penalty even at about 2 outer iterations per thread.
+  `-Kopenmp_collapse_except_innermost` did not combine with `-Ksimd=2`.
+- Option spelling: `-Ksimd_nopacked_promotion` (not
+  `-Knosimd_packed_promotion`, which only gives a warning and is ignored).
+
+### Run-time checking builds (`-H`)
+
+`-Haefosu` (argument, shape, bounds, overlap, undefined values; implies
+`-O0`) objects can be linked with normally optimised objects. **`-Hx` cannot
+be mixed:** it changes the module data layout, so every unit that uses a
+`-Hx`-compiled module must also be `-Hx`. A mixed link built fine and then
+failed with "undefined" checks on correctly set components and a SIGSEGV in
+`MPI_Comm_size`. Whole-program `-H` builds of a large code can be too slow to
+reach the code you care about; recompiling only the suspect directories at
+`-O0 -Haefosu` against the optimised build's modules works.
 
 ### Quick build example
 
@@ -530,6 +597,42 @@ export LD_LIBRARY_PATH="/vol0004/apps/oss/gcc-arm-11.2.1/aarch64-linux-gnu/lib64
 
 The GCC cross compiler's own `libgcc_s`/`libstdc++` are typically compatible with the compute-node system libraries — the binary's ELF `RPATH`/`RUNPATH` or default search order picks them up automatically. Explicitly overriding with the GCC cross `lib64` is what breaks `mpiexec`.
 
+### SSL2 BLAS results depend on the data address
+
+SSL2 `zdotc` is accurate, but not bitwise reproducible: the same vectors at a
+different memory alignment gave a result differing in the last bits in
+about 80% of cases (same address: always identical; any thread count). Code
+that repeats a computation on several ranks and assumes they agree
+bitwise can drift apart, and an iterative method (Lanczos/Haydock) amplifies
+it into a wrong answer that changes from run to run and with the rank count.
+Symptom: runs on one MPI rank are correct and runs on several ranks are
+wrong, with OpenMP on or off, while OpenBLAS builds are fine. Fix: compute
+on one rank and broadcast the result, or reduce it, so all ranks use
+identical values.
+
+### Fujitsu FFTW
+
+The site Spack has `fujitsu-fftw` 1.1.0 (A64FX-tuned FFTW3 API, `+openmp
++mpi`, Fujitsu compiler and MPI). It is a drop-in replacement for
+`fftw@3.3.10` at link time. Relinking one code against it made the FFT-heavy
+phase 23% faster, with identical results.
+
+### RPATH beats `LD_LIBRARY_PATH`
+
+A binary linked with `-rpath` (as Spack and most build systems do) keeps
+loading the libraries from its RPATH even if `LD_LIBRARY_PATH` lists another
+version first. Swapping in a different MPI or BLAS runtime therefore needs a
+relink; check with `ldd` inside the job (on a compute node: `ldd` of a cross
+binary fails on the login node).
+
+### OpenMP stack size for native `mpifrt` programs
+
+A small Fortran MPI+OpenMP test built with native `mpifrt -Kopenmp`
+segfaulted at 12 threads with the default stack, and with `OMP_STACKSIZE=64M`.
+`OMP_STACKSIZE=1G` fixed it. How much is needed depends on what the OpenMP
+regions put on the thread stacks (automatic arrays, private copies), so try
+a larger value when a threaded run crashes and a 1-thread run does not.
+
 ### Fortran preprocessor directives (`#ifdef`)
 
 Fujitsu `mpifrtpx` does **not** preprocess Fortran source by default. If your code uses C preprocessor directives inside `.f90` files (e.g., `#ifdef SIRIUS` / `#else` / `#endif` blocks, common in legacy Fortran codes like ELK), compilation fails with syntax errors on the `#` lines.
@@ -554,7 +657,149 @@ Plan log-gathering scripts accordingly.
 
 ---
 
-## Profiling on compute nodes with `perf`
+## Profiling
+
+Fujitsu's tools come with TCS. Measurement happens on a compute node with
+`fipp`/`fapp`; post-processing happens on the x86 login nodes with
+`fipppx`/`fapppx`. **The native commands do not exist on the login node at
+all** — verified on toolchain 1.2.43, where `/opt/FJSVxtclanga/tcsds-1.2.43/
+bin/` carries only `fipppx` and `fapppx`. A login-node measurement attempt
+therefore dies with a bare `command not found`, which is the usual reason a
+profiling attempt fails instantly. (`fipp`/`fapp` can also format their own
+output on a compute node with `-A` in place of `-C`; the two are mutually
+exclusive.)
+
+Pick by question:
+
+| Question | Tool | Needs source changes? |
+|---|---|---|
+| Where does the whole program spend time? | `fipp` (sampling) | No |
+| FLOP/s, memory bandwidth, SIMD rate, IPC, MPI cost of one region | `fapp` | Yes: mark regions |
+| Full hardware breakdown (cache, pipeline, FP) as charts | `fapp` + CPU Performance Analysis Report | Yes |
+| Instruction-level hot spots (`perf annotate`) | `perf` | No |
+
+### Whole-program profile: `fipp`
+
+Low overhead, no recompilation. Collect in the job, then format on the login
+node:
+
+```sh
+fipp -C -Icpupa,mpi,call -d ./fipp_data ./app        # compute node
+fipp -C -Icpupa,mpi,call -d ./fipp_data mpiexec -n 4 ./app   # MPI: wrap the launch
+fipppx -A -Icall,cpupa,mpi,src -ttext -o fipp.txt -d ./fipp_data   # login node
+```
+
+- **For MPI programs, wrap the whole launch** as above. Putting `fipp`
+  inside it (`mpiexec -n 4 fipp -C … ./app`) ends with "fipp: profiling
+  data is invalid". Tested on a 4-rank Fortran program.
+- If MPI is initialised from a C `main` (`MPI_Init` in C), link with
+  `-lfjprofmpi`. Without it the profile still works but reports
+  "Type of program: SERIAL" and has no MPI data.
+- The report header gives the CPU clock the job ran at; use it for percent
+  of peak (below).
+- Set `FLIB_FASTOMP` to a true value, or `fipp` does not behave correctly.
+- `-d` must name a new or empty directory, so version the name rather than
+  reusing it. Give it an absolute path if the program changes its own
+  working directory while running.
+- Sampling needs roughly a second of runtime as a floor; below that `fipp`
+  cannot measure at all.
+- Builds with link-time optimisation (`-Klto`/`-flto`) lose call-graph and
+  per-line accuracy; profile without it.
+- At scale, restrict post-processing to a few ranks with `-p` (e.g.
+  `-p0,1`) and add `-Inompi` if MPI data is not needed.
+- Samples shown as `__?unknown` did not map to a procedure; change the
+  sampling interval (`fipp -C -i …`).
+
+**The interval you ask for is not the interval you get**, which is why
+nudging `-i` by a little often changes nothing. Sampling is pinned to the OS
+timer interrupt — roughly 11–14 ms depending on noise suppression — and the
+request is rounded to a multiple of it. At a 14 ms tick, both `-i 10` and
+`-i 25` give 14 ms, and `-i 100` gives 98 ms. Move it in multiples of the
+tick, or not at all. Defaults and ranges: `-i` 100 ms (10–3600000), `-l` 0
+meaning every procedure (0–2147483647), `-m` 3000 KB of per-thread work
+buffer (1–2147483).
+
+If a run ends with this, that buffer was too small — raise `-m` to at least
+the figure it names and measure again:
+
+```
+fipp: work memory overflowed. specify memsize or more to -m option and retry.
+```
+
+### Region counters and FLOP rates: `fapp`
+
+**`fapp` only measures code between `fapp_start`/`fapp_stop` calls**, so
+the source must be instrumented and recompiled (the profiler library is
+linked by default; `-Nnofjprof` / `-ffj-no-fjprof` would remove it):
+
+```fortran
+call fapp_start("solver", 1, 0)   ! name (letters, digits, _), id, level
+! ... region ...
+call fapp_stop("solver", 1, 0)
+```
+
+C/C++ use the same calls via `#include "fj_tool/fapp.h"`. Regions whose
+level exceeds the run-time level (`-L`) are skipped, which keeps overhead
+down. Then:
+
+```sh
+fapp -C -Icpupa,mpi -Hevent=pa1 -d ./fapp_pa1 ./app    # compute node
+fapppx -A -Icpupa,mpi -ttext -o fapp_pa1.txt -d ./fapp_pa1   # login node
+```
+
+Event set `pa1` (or `statistics`) gives the headline numbers: FLOP/s,
+memory throughput, SIMD instruction rate and IPC. To get **percent of
+peak**, divide FLOP/s by the A64FX peak: 48 cores × 32 double-precision
+flop/cycle × clock: 3.07 TFLOP/s per node at 2.0 GHz, 3.38 at 2.2 GHz.
+The clock is not fixed: `fipp` reported 2200 MHz in `f-pt` jobs, so read it
+from the profile header rather than assuming 2.0 GHz. Never pass
+`-Inocpupa` at collection: it disables `-Hevent`.
+
+**Bind threads to cores one-to-one before trusting counter data.** An
+unbound run still produces numbers, but they cannot be attributed. For a
+non-threaded MPI program use a VCOORD file with `core=1` for every process;
+for a program that is neither threaded nor MPI, `taskset` or `numactl`.
+
+Running `fapp -C` on a large un-instrumented MPI code (Yambo) ended with
+"fapp: The profiling data is not correctly generated" and wrote no data.
+Do not read that as "fapp needs regions": `fipp` gave the same message on
+every Yambo executable, even for `yambo -h` and for GCC and stripped
+builds, while it worked on small Fortran and C-`main` MPI programs. Fujitsu
+documents the message as "the file format of the executable file is
+incorrect", or more generally "the program did not end normally". The cause
+for that code was never found. If `fipp` also fails on a program, the
+problem is the program and `perf` is the fallback; for a whole-program
+profile of a normal program, use `fipp`.
+
+### CPU Performance Analysis Report
+
+For the full hardware picture, run the same instrumented program several
+times, one event set per run, each into its own directory: `pa1` alone for
+the single-page report, `pa1`–`pa5` for the brief one, `pa1`–`pa11` for the
+standard one, up to `pa1`–`pa17` for the detailed one. **That is 1, 5, 11 or
+17 executions of the same program** — on Fugaku, billed node-hours each, so
+say which tier is intended before promising a report.
+
+Export each with `fapppx -A -tcsv -d ./rep<N> -o rep<N>.csv` and load the
+CSVs into Fujitsu's `cpu_pa_report.xlsm` Excel macro on a desktop. At large
+rank counts, limit the export with `-p` or the CSV may exceed Excel's row
+limit.
+
+Practical notes on that last step:
+
+- The workbook lives on the login node, confirmed present at
+  `/opt/FJSVxtclanga/tcsds-1.2.43/misc/cpupa/cpu_pa_report.xlsm`.
+- It reads **only** files named `pa1.csv` through `pa17.csv`, from its own
+  directory, and picks the tier from which ones it finds — so a missing
+  `pa7.csv` quietly demotes a standard report. Name the exports to match.
+- It is macro-driven, so macros must be enabled. Fujitsu records verifying
+  it on Windows 11 with 64-bit Excel for Microsoft 365, and on macOS
+  Catalina.
+- **Do not save the workbook after it reads data**; a saved copy will not
+  read a fresh set. Keep a pristine copy and work from duplicates.
+- It does not support dynamically spawned processes.
+
+### `perf` (sampling and annotation)
 
 `perf` works inside jobs (`perf_event_paranoid` is 1), but **the hardware
 `cycles` event records no samples** on these nodes: the run looks fine and
@@ -571,6 +816,63 @@ rate like 199 Hz keeps the overhead small. Run `perf report --stdio
 where the binary and its libraries are visible. `kptr_restrict` warnings
 are harmless. frt OpenMP regions show up as `<routine>._OMP_<n>_`, and
 libgomp ones as `<routine>_._omp_fn.<n>`.
+
+### Where these profiling facts come from
+
+The `perf` behaviour, the `fapp`/`fipp` failure on Yambo, the `fipp` MPI
+placement, the `-lfjprofmpi` effect and the clock come from profiling
+sessions on Fugaku. The command locations and
+the workbook path were checked live against toolchain 1.2.43. The flag
+semantics, option ranges, event-set numbering and the conditions below are
+recorded from Fujitsu's Profiler User's Guide for Technical Computing Suite
+V4.0L20 (J2UL-2568-01ENZ0, September 2025) without being individually
+exercised — reliable for what a flag means, worth confirming the first time a
+behavioural claim matters. Ranges and event numbering can move between TCS
+releases.
+
+### Conditions that quietly invalidate a measurement
+
+Check these before blaming the tool. Most produce no error at all — just
+data that is wrong, or absent.
+
+**Job shape.** A node-sharing job may measure incorrectly or not at all; for
+MPI under node sharing the measurement fails and takes the program with it.
+Profile in a job with whole nodes.
+
+**How it was built.** Position-independent executables (`-fpie`, `-fPIE`)
+cannot be measured correctly. C and C++ need `-O1` or higher for `fipp`. Do
+not `strip` the executable, nor any shared library whose cost you want
+attributed. If you set `-rpath` or `LD_RUN_PATH`, keep the toolchain's own
+`lib64` out of `DT_RPATH` — `readelf -d` shows it, and its presence breaks
+`fipp` measurement.
+
+**What the program does.** Spawning processes via `fork`, `vfork`, `popen`
+or `system` prevents correct measurement. The profilers hook MPI calls, so
+they cannot coexist with the MPI profiling interface: a program using it
+reports as non-MPI and `fipp` collapses every rank to `Process0`.
+
+**Environment.** `LD_PRELOAD` breaks both tools; leave it unset. Variables
+beginning `FIPP_`, `FAPP_`, `PROF_`, `FJPROF_` or `FPROF_` belong to the
+profilers — do not set them. If you pass `mpiexec -x LD_LIBRARY_PATH=…`,
+the profiler's own library directory has to come first in that value or the
+hooks never load.
+
+**Thread model.** Only Fujitsu automatic parallelisation and OpenMP are
+measured. Raw pthreads are invisible, so a pthread-parallel code looks
+single-threaded.
+
+**Mixed-language MPI.** Linking Fortran with C/C++ needs an extra library:
+`-lfjprofmpif` when linking with `mpifccpx` or `mpiFCCpx`, `-lfjprofmpi`
+with `mpifrtpx`.
+
+**Exit status.** Under a profiler the reported exit status may be the
+profiler's rather than the program's — do not use it to judge whether the
+application itself succeeded.
+
+When reporting profiling results, say which tool produced them, the
+*effective* sampling interval rather than the requested one, and whether
+threads were bound. If a run hit any condition above, say so instead of
+presenting the output as clean.
 
 ## Build diagnostics checklist
 
