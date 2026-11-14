@@ -92,20 +92,21 @@ facility packs the user selected.
 
 ### Pi
 
-Pi reads this repository's root `package.json` as a package manifest and
-loads `pi/extension.ts`. Install once:
+Install once:
 
 ```sh
 pi install git:github.com/william-dawson/hpc-rookery@main
 ```
 
-The extension registers both MCP servers, always contributes the shared
-`hpc-facilities` skill, and contributes the facility packs you select with
-its `/hpc` command (space toggles, Enter applies; `/hpc set rikyu,fugaku`
-works non-interactively). The selection is stored per user in
-`~/.pi/agent/hpc-rookery.json`, and applying it reloads the session so the
-packs load. See `pi/README.md` for exposure settings, the `fs_rm`
-confirmation gate, and overrides.
+Then start `pi` and type `/hpc` to set up the machines — pick the
+facilities you use and the session reloads with their skill packs
+(non-interactive alternative: `/hpc set rikyu,fugaku`). Pi reads this
+repository's root `package.json` as a package manifest and loads
+`pi/extension.ts`, which registers both MCP servers, always contributes the
+shared `hpc-facilities` skill, and contributes the selected facility packs.
+The selection is stored per user in `~/.pi/agent/hpc-rookery.json`. See
+`pi/README.md` for exposure settings, the `fs_rm` confirmation gate, known
+limitations, and overrides.
 
 ### Manual installation for any MCP-capable harness
 

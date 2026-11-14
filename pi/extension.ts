@@ -352,4 +352,26 @@ export default function (pi: ExtensionAPI) {
 			return { block: true, reason: `User declined deleting ${target}.` };
 		}
 	});
+
+	// -----------------------------------------------------------------------
+	// Known harness limitation: models sometimes emit a nested object
+	// parameter as a JSON-encoded string. Pi validates MCP tool arguments
+	// against the server's published schema before executing them, and
+	// JobSpec's schema declares `spec` as an object — so a stringified spec
+	// is rejected client-side ("spec: expected object, got string") and
+	// never reaches the server, which would otherwise have parsed it.
+	// Invalid arguments also skip the tool_call event, so no hook can repair
+	// the call after the fact; guard the model instead with a prompt rule.
+	// -----------------------------------------------------------------------
+
+	const specRule =
+		"When calling mcp__hpc__submit_job, mcp__hpc__render_job_script, or " +
+		"mcp__hpc__update_job, pass the `spec` parameter as a JSON object (its fields as keys) — " +
+		"never as a JSON-encoded string; a string `spec` fails argument validation before the " +
+		"call reaches the server.";
+
+	pi.on("before_agent_start", (event) => {
+		const guidelines = (event.systemPromptOptions.promptGuidelines ??= []);
+		if (!guidelines.includes(specRule)) guidelines.push(specRule);
+	});
 }

@@ -12,6 +12,9 @@ the Codex and Claude Code plugins consume them.
 pi install git:github.com/william-dawson/hpc-rookery@main
 ```
 
+Then start `pi` and type `/hpc` to set up the machines — that loads the
+skill packs for the facilities you pick (see `/hpc` below).
+
 From a checkout, `pi -e ./pi/extension.ts` tries it for one session, or
 `pi install ./` installs the checkout persistently. Pi pins a git install
 to the ref you name; update with `pi update --extensions`.
@@ -57,6 +60,28 @@ The selection is stored per **user**, not per project, in
 belongs to the user's ssh config and `~/.hpc-agent`, not to a repository.
 Skills are contributed through the `resources_discover` event, so Pi
 package resource filters do not manage them; `/hpc` is the one mechanism.
+
+## Known limitation: `spec` must be a real JSON object
+
+Some models emit a nested object parameter as a JSON-encoded string.
+Pi validates every MCP tool call against the server's published schema
+*before executing it*, and `submit_job`, `render_job_script`, and
+`update_job` declare `spec` as an object — so a stringified `spec` is
+rejected client-side with `spec: expected object, got string` and never
+reaches the server. The Python server would in fact accept either form
+(pydantic parses JSON strings for model fields in lax mode), which is why
+the same call works from harnesses that do not pre-validate; Pi's check is
+the stricter, schema-correct one. The validation also runs before the
+`tool_call` extension event, so no hook can repair the call after the
+fact.
+
+The extension mitigates by adding a prompt rule naming those three tools
+(pass `spec` as an object). If a model still stringifies, steer it
+("pass spec as an object, not a string") and it will retry. The deeper
+upstream fix would be a pi-schema coercion rule that parses a JSON string
+where the schema expects an object — pydantic's lax mode behaves that way;
+the server schema itself is correct and shared with every other harness,
+so it is deliberately not changed here.
 
 ## Safety gate
 
