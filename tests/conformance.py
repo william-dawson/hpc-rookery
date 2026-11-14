@@ -2048,6 +2048,44 @@ def check_repo() -> None:
                         "without user config"
                     )
 
+    def tool_schemas_have_no_local_ref_indirection():
+        """pydantic emits model-typed parameters as {"$ref": "#/$defs/X"}
+        alongside a $defs table, and some model gateways cannot parse that
+        shape: two have been observed (glm-5.3 on the RIKYU endpoint, and
+        RiVault) emitting such a parameter as a JSON-encoded *string*, which
+        harness-side schema validation then rejects before the call reaches
+        this server. Pi hit the same class of bug on its Anthropic side (pi
+        #9557: dangling $refs made Claude emit "a JSON string instead of an
+        object"). MCPServer.list_tools must therefore publish schemas with
+        local refs inlined, and the inliner must leave a schema it cannot
+        fully resolve untouched rather than half-expand it.
+
+        Call-time behavior is deliberately not asserted: pydantic builds
+        arguments from the function signature, never from the published
+        schema, so accepting a call never depended on the inlining.
+        """
+        import asyncio
+
+        from hpc_agent_core.mcp_server import _inline_local_refs
+        from hpc_mcp.docs_server import mcp as docs_server
+        from hpc_mcp.hpc_server import mcp as hpc_server
+
+        for server in (hpc_server, docs_server):
+            for tool in asyncio.run(server.list_tools()):
+                blob = json.dumps(tool.input_schema)
+                assert '"$ref"' not in blob, (
+                    f"{server.name}/{tool.name}: schema still uses ref indirection")
+                assert '"$defs"' not in blob and '"definitions"' not in blob, (
+                    f"{server.name}/{tool.name}: schema still ships a defs table")
+
+        # A ref the inliner cannot resolve (here: a URL ref) must leave
+        # the schema exactly as generated, not half-expanded.
+        url_ref_schema = {
+            "type": "object",
+            "properties": {"x": {"$ref": "https://example.com/X"}},
+        }
+        assert _inline_local_refs(url_ref_schema) == url_ref_schema
+
     check("at least one facility is registered", facilities_exist)
     check("unknown facility errors clearly, listing valid slugs", unknown_facility_errors_clearly)
     check("slugs are lowercase and safe", slugs_are_url_and_identifier_safe)
@@ -2079,6 +2117,8 @@ def check_repo() -> None:
           remote_command_skills_cover_forwarded_git_authentication)
     check("every facility-scoped MCP tool checks configuration first",
           every_facility_scoped_mcp_tool_checks_configuration_first)
+    check("tool schemas inline local $refs",
+          tool_schemas_have_no_local_ref_indirection)
 
 
 def main() -> int:
