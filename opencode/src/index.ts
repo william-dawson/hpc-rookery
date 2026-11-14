@@ -27,8 +27,12 @@ import { fileURLToPath } from "node:url";
 
 import { Plugin, Skill, type Mcp } from "@opencode/plugin";
 
-/** Same default install ref as every other harness target in this repo. */
-const PKG_REF_DEFAULT = "git+https://github.com/william-dawson/hpc-rookery.git@main";
+/**
+ * BRANCH-ONLY scaffolding — do not merge to main. Installs from this
+ * branch must also RUN servers from this branch, or a plugin-add test
+ * of the schema fix would silently exercise @main schemas.
+ */
+const PKG_REF_DEFAULT = "git+https://github.com/william-dawson/hpc-rookery.git@fix/inline-tool-schema-refs";
 
 /**
  * The plugin lives at <repo>/opencode/src/index.ts, whether that repo is a
