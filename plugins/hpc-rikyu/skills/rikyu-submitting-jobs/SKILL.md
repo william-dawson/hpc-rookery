@@ -94,17 +94,27 @@ MPI-IO reads into managed memory on this stack — see the SALMON notes.)
 Two more limits found in the same campaign, both fail-
 silently-capable:
 
-- **One NCCL rank per GPU.** Two ranks sharing one GPU (CUDA MPS
-  multi-client, as in multi-walker QMC codes) cannot share one NCCL
-  communicator: `ncclCommInitRank` fails deterministically with
+- **One NCCL rank per GPU (prior to NCCL 2.30).** Two ranks sharing one
+  GPU (CUDA MPS multi-client, as in multi-walker QMC codes) cannot share
+  one NCCL communicator on this RIKYU stack's NCCL 2.29.3:
+  `ncclCommInitRank` fails deterministically with
   `NCCL WARN Duplicate GPU detected` / `ncclInvalidUsage`, single-node
-  and multi-node alike, every NCCL version tested, and no MPS tuning
-  changes it. The performance knobs that *do* matter for MPS
+  and multi-node alike. **NCCL 2.30+ adds experimental multi-rank-per-GPU
+  support** — `NCCL_MULTI_RANK_GPU_ENABLE=1` (disabled by default),
+  typically paired with `NCCL_MAX_CTAS=4` to bound the collective's SM
+  footprint and `NCCL_NVLS_ENABLE=0` (NVLS is unavailable to
+  duplicate-GPU ranks); the `nvhpc-hpcx-cuda13/26.9` module's NCCL
+  2.31.2 qualifies. Deadlock risk is real: two ranks' NCCL kernels on
+  one GPU can each wait for the other's SM residency (defaults
+  accommodate ~2 ranks/GPU; more needs resource tuning; if a multi-rank
+  run hangs, `NCCL_NET_GDR_LEVEL=LOC` is the troubleshooting knob, at a
+  performance cost). The version-independent fallback remains: one NCCL
+  communicator per GPU, reduce the co-tenants into that rank first, run
+  the collective over one rank per GPU, broadcast back. The
+  performance knobs that *do* matter for MPS
   (`CUDA_DEVICE_MAX_CONNECTIONS`, `CUDA_DEVICE_MAX_COPY_CONNECTIONS`,
   the MPS-server-startup L2 set-aside) are about run speed, not this
-  limit. Workaround pattern: one NCCL communicator per GPU, reduce the
-  co-tenants into that rank first, run the collective over one rank per
-  GPU, broadcast back.
+  feature.
 - **Do not pin ranks to NICs with per-rank `UCX_NET_DEVICES`.** The
   GB200 tuning guide's per-rank `UCX_NET_DEVICES=mlx5_<i>:1` recipe
   makes inter-node CUDA sends fail outright on this stack
