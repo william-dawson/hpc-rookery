@@ -63,73 +63,42 @@ attaching to a running job with `srun --overlap --jobid <id>` for
 diagnostics like `nvidia-smi`; the failure is specifically MPI rank
 bootstrap.)
 
-## NCCL collectives need NUMA-bound ranks (silently 60x slow otherwise)
+## NCCL / GPU collectives — quick fixes
 
-Verified live on a 2-node, 8-GPU job (4 ranks/node, one GPU per rank,
-`nvhpc-hpcx-cuda13/26.5`, NCCL 2.29.3): the same `ncclAllReduce` of a
-9.5 MB device buffer measures **0.17 ms (96 GB/s bus) with `mpirun
---bind-to numa --map-by numa`, but 12 ms (1.4 GB/s) unbound or with
-`--bind-to core`** — a 60x cliff with no error, no warning, and a
-plausible-looking result either way. Plain `MPI_Send`/`Recv` on the same
-buffers moves 95.7 GB/s in both cases, so this is NCCL-specific.
-
-Mechanism: NCCL pairs each GPU with each rank's *nearest* NIC using the
-rank's CPU affinity data. GB200 nodes have two Grace sockets (GPU0/1 on
-socket 0, GPU2/3 on socket 1, one CX-7 NIC per GPU); unbound ranks give
-NCCL no usable affinity ("Affinity for GPU 2 is empty, ignoring" in
-`NCCL_DEBUG=INFO`), it mispairs the rails, and the inter-node collective
-stalls on one shared NIC. `--bind-to core` is just as bad — it packs ranks
-onto one socket's cores regardless of their GPU. `--bind-to numa
---map-by numa` puts each rank on its own GPU's socket, and is the fix.
-
-**Every NCCL job on RIKYU should launch with**
+Launch every NCCL or GPU-MPI job with ranks NUMA-bound — NCCL pairs each
+GPU with its own NIC from rank affinity data:
 
 ```sh
 mpirun -n <np> --bind-to numa --map-by numa --mca fcoll individual ./app
 ```
 
-(`--mca fcoll individual` is a separate, unrelated requirement for
-MPI-IO reads into managed memory on this stack — see the SALMON notes.)
-
-Two more limits found in the same campaign, both fail-
-silently-capable:
-
-- **Multi-rank-per-GPU under MPS works on NCCL 2.30+ — measured.** Two
-  MPI ranks (e.g. multi-walker QMC) sharing one GPU via MPS cannot share
-  one NCCL communicator on NCCL 2.29 (this stack's
-  `nvhpc-hpcx-cuda13/26.5`): `ncclCommInitRank` fails with
-  `NCCL WARN Duplicate GPU detected` / `ncclInvalidUsage`. **NCCL 2.30+
-  fixes this with `NCCL_MULTI_RANK_GPU_ENABLE=1`** (experimental, off by
-  default) — verified live on RIKYU with `nvhpc-hpcx-cuda13/26.9`
-  (NCCL 2.31.2), 2 MPS clients per GPU across 2 nodes, 9.5 MB allreduce:
-  **0.327 ms / 54.5 GB/s**, result exact, against 0.142 ms / 117 GB/s at
-  1 rank per GPU — i.e. clean bandwidth sharing, no deadlock in the wild,
-  and 18x faster than `MPI_Allreduce` on the same ranks (5.9 ms). Without
-  the flag the same build fails `ncclCommInitRank` exactly as 2.29 does,
-  so the flag is the switch, not a version gamble. Working config:
+- **NCCL collective is seconds instead of ~sub-ms, result is correct:**
+  ranks are unbound or `--bind-to core`. NCCL mispairs GPU↔NIC; the
+  collective silently runs ~60x slow on one shared rail. Fix: `--bind-to
+  numa --map-by numa`.
+- **`"Duplicate GPU detected"` / `ncclInvalidUsage` from
+  `ncclCommInitRank`:** more than one rank per GPU in one communicator
+  (MPS or not). On NCCL ≥ 2.30, enable multi-rank-per-GPU — verified
+  working at 2 ranks/GPU on RIKYU (NCCL 2.31.2 via
+  `nvhpc-hpcx-cuda13/26.9`):
 
   ```sh
-  export NCCL_MULTI_RANK_GPU_ENABLE=1
-  export NCCL_MAX_CTAS=4          # bound the collective's SM footprint
-  export NCCL_NVLS_ENABLE=0       # NVLS is unavailable to duplicate-GPU ranks
+  export NCCL_MULTI_RANK_GPU_ENABLE=1   # NCCL >= 2.30, off by default
+  export NCCL_MAX_CTAS=4                # cap collective SM use (defaults fit ~2 ranks/GPU; retune for more)
+  export NCCL_NVLS_ENABLE=0             # NVLS is unavailable to duplicate-GPU ranks
   ```
 
-  Caveats from NVIDIA + our runs: defaults are sized for ~2 ranks/GPU (more
-  co-tenants need `NCCL_MAX_CTAS` retuning — e.g. 1 at 8 ranks/GPU); two
-  ranks' NCCL kernels on one GPU can deadlock waiting on each other's SM
-  residency (if a multi-rank run hangs, try `NCCL_NET_GDR_LEVEL=LOC` —
-  performance cost, troubleshooting only); no published data claims MPS
-  makes the collective itself *faster* than 1-rank-per-GPU — the win is
-  letting a many-ranks-per-GPU app use NCCL at all. The version-independent
-  fallback remains one communicator per GPU with a local reduce stage
-  (reduce co-tenants, collective over one rank per GPU, broadcast back).
-- **Do not pin ranks to NICs with per-rank `UCX_NET_DEVICES`.** The
-  GB200 tuning guide's per-rank `UCX_NET_DEVICES=mlx5_<i>:1` recipe
-  makes inter-node CUDA sends fail outright on this stack
-  (`UCX ERROR cannot find remote protocol ... tag_send from cuda/GPU0`
-  → `ucp_ep_create failed: Destination is unreachable`, HPC-X 2.50).
-  Leave `UCX_NET_DEVICES` unset; NCCL's own affinity-based pairing works
-  correctly once ranks are NUMA-bound.
+  If it hangs (SM residency deadlock): `NCCL_NET_GDR_LEVEL=LOC` —
+  diagnostics only, costs performance. On NCCL ≤ 2.29 use the fallback:
+  one communicator per GPU — reduce co-tenants into that rank, collective
+  over one rank per GPU, broadcast back.
+- **Inter-node CUDA sends die with "cannot find remote protocol … from
+  cuda/GPU" / `ucp_ep_create failed`:** a per-rank `UCX_NET_DEVICES=mlx5_<i>:1`
+  is set (a GB200 tuning-guide recipe). Unset it; NUMA binding covers NCCL's
+  NIC selection.
+
+MPI-IO, MPS-launch, GPU-slot and `processes_per_node` gotchas: see the MPI
+launch section above.
 
 ## RIKYU conventions
 
