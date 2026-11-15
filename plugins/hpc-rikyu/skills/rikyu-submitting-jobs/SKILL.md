@@ -94,27 +94,35 @@ MPI-IO reads into managed memory on this stack — see the SALMON notes.)
 Two more limits found in the same campaign, both fail-
 silently-capable:
 
-- **One NCCL rank per GPU (prior to NCCL 2.30).** Two ranks sharing one
-  GPU (CUDA MPS multi-client, as in multi-walker QMC codes) cannot share
-  one NCCL communicator on this RIKYU stack's NCCL 2.29.3:
-  `ncclCommInitRank` fails deterministically with
-  `NCCL WARN Duplicate GPU detected` / `ncclInvalidUsage`, single-node
-  and multi-node alike. **NCCL 2.30+ adds experimental multi-rank-per-GPU
-  support** — `NCCL_MULTI_RANK_GPU_ENABLE=1` (disabled by default),
-  typically paired with `NCCL_MAX_CTAS=4` to bound the collective's SM
-  footprint and `NCCL_NVLS_ENABLE=0` (NVLS is unavailable to
-  duplicate-GPU ranks); the `nvhpc-hpcx-cuda13/26.9` module's NCCL
-  2.31.2 qualifies. Deadlock risk is real: two ranks' NCCL kernels on
-  one GPU can each wait for the other's SM residency (defaults
-  accommodate ~2 ranks/GPU; more needs resource tuning; if a multi-rank
-  run hangs, `NCCL_NET_GDR_LEVEL=LOC` is the troubleshooting knob, at a
-  performance cost). The version-independent fallback remains: one NCCL
-  communicator per GPU, reduce the co-tenants into that rank first, run
-  the collective over one rank per GPU, broadcast back. The
-  performance knobs that *do* matter for MPS
-  (`CUDA_DEVICE_MAX_CONNECTIONS`, `CUDA_DEVICE_MAX_COPY_CONNECTIONS`,
-  the MPS-server-startup L2 set-aside) are about run speed, not this
-  feature.
+- **Multi-rank-per-GPU under MPS works on NCCL 2.30+ — measured.** Two
+  MPI ranks (e.g. multi-walker QMC) sharing one GPU via MPS cannot share
+  one NCCL communicator on NCCL 2.29 (this stack's
+  `nvhpc-hpcx-cuda13/26.5`): `ncclCommInitRank` fails with
+  `NCCL WARN Duplicate GPU detected` / `ncclInvalidUsage`. **NCCL 2.30+
+  fixes this with `NCCL_MULTI_RANK_GPU_ENABLE=1`** (experimental, off by
+  default) — verified live on RIKYU with `nvhpc-hpcx-cuda13/26.9`
+  (NCCL 2.31.2), 2 MPS clients per GPU across 2 nodes, 9.5 MB allreduce:
+  **0.327 ms / 54.5 GB/s**, result exact, against 0.142 ms / 117 GB/s at
+  1 rank per GPU — i.e. clean bandwidth sharing, no deadlock in the wild,
+  and 18x faster than `MPI_Allreduce` on the same ranks (5.9 ms). Without
+  the flag the same build fails `ncclCommInitRank` exactly as 2.29 does,
+  so the flag is the switch, not a version gamble. Working config:
+
+  ```sh
+  export NCCL_MULTI_RANK_GPU_ENABLE=1
+  export NCCL_MAX_CTAS=4          # bound the collective's SM footprint
+  export NCCL_NVLS_ENABLE=0       # NVLS is unavailable to duplicate-GPU ranks
+  ```
+
+  Caveats from NVIDIA + our runs: defaults are sized for ~2 ranks/GPU (more
+  co-tenants need `NCCL_MAX_CTAS` retuning — e.g. 1 at 8 ranks/GPU); two
+  ranks' NCCL kernels on one GPU can deadlock waiting on each other's SM
+  residency (if a multi-rank run hangs, try `NCCL_NET_GDR_LEVEL=LOC` —
+  performance cost, troubleshooting only); no published data claims MPS
+  makes the collective itself *faster* than 1-rank-per-GPU — the win is
+  letting a many-ranks-per-GPU app use NCCL at all. The version-independent
+  fallback remains one communicator per GPU with a local reduce stage
+  (reduce co-tenants, collective over one rank per GPU, broadcast back).
 - **Do not pin ranks to NICs with per-rank `UCX_NET_DEVICES`.** The
   GB200 tuning guide's per-rank `UCX_NET_DEVICES=mlx5_<i>:1` recipe
   makes inter-node CUDA sends fail outright on this stack
