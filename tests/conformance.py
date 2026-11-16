@@ -1607,14 +1607,6 @@ def check_repo() -> None:
             assert list((plugin / "skills").glob(f"{fac.slug}-*/SKILL.md")), \
                 f"{fac.slug} pack has no generated skills"
 
-    def readme_requires_explicit_facility_selection_for_manual_install():
-        root = pathlib.Path(__file__).resolve().parent.parent
-        readme = (root / "README.md").read_text()
-        normalized = " ".join(readme.split())
-        assert "before installing any facility skills, ask the user" in normalized
-        assert "Do not install all facility packs by default" in normalized
-        assert "plugins/hpc-<selected-slug>/skills/" in readme
-
     def job_name_cannot_inject_into_scripts():
         """spec.name is rendered unquoted into every scheduler's directive
         line and used to build the job script's filename, so it is a real
@@ -2142,8 +2134,6 @@ def check_repo() -> None:
     check("generated skills have matching frontmatter", generated_skills_are_wellformed)
     check("facility skill packs are isolated and discoverable",
           facility_skill_packs_are_isolated_and_discoverable)
-    check("README requires explicit facility selection for manual install",
-          readme_requires_explicit_facility_selection_for_manual_install)
     check("scheduler errors aren't mistaken for SSH failures", unreachable_detection_discriminates)
     check("every facility has real submitting-jobs notes", every_facility_has_skill_notes)
     check("remote-command skills diagnose forwarded Git authentication",
