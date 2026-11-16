@@ -523,6 +523,8 @@ This rewrites the block between the `FACILITY_TABLE:START` /
 `FACILITY_TABLE:END` HTML-comment marker pair in every file that has one
 (README.md, AGENTS.md, the `hpc-facilities` skill). CI checks that generated
 output is current; run the generator yourself and commit the result.
+The start marker may include `live` or `awaiting` after `START` to render
+only that validation group; README.md uses these to place the tables apart.
 
 (Note for anyone editing *this* file: don't write the two markers next to
 each other as a literal matched HTML-comment pair anywhere in this

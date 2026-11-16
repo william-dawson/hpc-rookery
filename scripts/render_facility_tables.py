@@ -13,6 +13,8 @@ Marked files are found by searching the repo for the marker pair itself
 (FACILITY_TABLE:START / FACILITY_TABLE:END as an HTML comment or, in
 Python, a plain comment) — no separate list to keep in sync. Add the marker
 pair to any new skill/README that needs the table; nothing else to wire up.
+Add `live` or `awaiting` after FACILITY_TABLE:START to render just that
+validation group, so the two tables can appear in different sections.
 """
 import argparse
 import json
@@ -24,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 START = "FACILITY_TABLE:START"
 END = "FACILITY_TABLE:END"
 _MARKER_BLOCK = re.compile(
-    r"(?P<start><!--\s*" + START + r"\s*-->)(?P<body>.*?)(?P<end><!--\s*" + END + r"\s*-->)",
+    r"(?P<start><!--\s*" + START + r"(?:\s+(?P<group>live|awaiting))?\s*-->)(?P<body>.*?)(?P<end><!--\s*" + END + r"\s*-->)",
     re.DOTALL,
 )
 
@@ -46,7 +48,7 @@ def _table(facilities: list[dict]) -> list[str]:
     return lines
 
 
-def render_table(facilities: list[dict]) -> str:
+def render_table(facilities: list[dict], group: str | None = None) -> str:
     for f in facilities:
         if not isinstance(f.get("live_validated"), bool):
             raise ValueError(
@@ -55,7 +57,7 @@ def render_table(facilities: list[dict]) -> str:
 
     validated = [f for f in facilities if f["live_validated"]]
     awaiting = [f for f in facilities if not f["live_validated"]]
-    lines = [
+    live_lines = [
         "",
         "### Live-tested facilities",
         "",
@@ -63,7 +65,10 @@ def render_table(facilities: list[dict]) -> str:
         "",
         *_table(validated),
         "",
-        "### Awaiting live validation",
+    ]
+    awaiting_lines = [
+        "",
+        "## Awaiting live validation" if group == "awaiting" else "### Awaiting live validation",
         "",
         "These ports register and pass the offline test suite, but have not yet",
         "completed an end-to-end check against the current live system.",
@@ -71,7 +76,11 @@ def render_table(facilities: list[dict]) -> str:
         *_table(awaiting),
         "",
     ]
-    return "\n".join(lines)
+    if group == "live":
+        return "\n".join(live_lines)
+    if group == "awaiting":
+        return "\n".join(awaiting_lines)
+    return "\n".join(live_lines + awaiting_lines[1:])
 
 
 def files_with_markers() -> list[Path]:
@@ -88,10 +97,10 @@ def files_with_markers() -> list[Path]:
     return hits
 
 
-def render_file(path: Path, table: str) -> str | None:
+def render_file(path: Path, tables: dict[str | None, str]) -> str | None:
     text = path.read_text()
     new_text, n = _MARKER_BLOCK.subn(
-        lambda m: m.group("start") + table + m.group("end"), text
+        lambda m: m.group("start") + tables[m.group("group")] + m.group("end"), text
     )
     if n == 0:
         return None  # markers present as plain text but not as a matched pair (malformed)
@@ -105,10 +114,10 @@ def main() -> int:
     args = parser.parse_args()
 
     facilities = load_facilities()
-    table = render_table(facilities)
+    tables = {group: render_table(facilities, group) for group in (None, "live", "awaiting")}
     stale = []
     for path in files_with_markers():
-        new_text = render_file(path, table)
+        new_text = render_file(path, tables)
         if new_text is None:
             continue
         stale.append(path)
