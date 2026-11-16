@@ -63,6 +63,43 @@ attaching to a running job with `srun --overlap --jobid <id>` for
 diagnostics like `nvidia-smi`; the failure is specifically MPI rank
 bootstrap.)
 
+## NCCL / GPU collectives — quick fixes
+
+Launch every NCCL or GPU-MPI job with ranks NUMA-bound — NCCL pairs each
+GPU with its own NIC from rank affinity data:
+
+```sh
+mpirun -n <np> --bind-to numa --map-by numa --mca fcoll individual ./app
+```
+
+- **NCCL collective is seconds instead of ~sub-ms, result is correct:**
+  ranks are unbound or `--bind-to core`. NCCL mispairs GPU↔NIC; the
+  collective silently runs ~60x slow on one shared rail. Fix: `--bind-to
+  numa --map-by numa`.
+- **`"Duplicate GPU detected"` / `ncclInvalidUsage` from
+  `ncclCommInitRank`:** more than one rank per GPU in one communicator
+  (MPS or not). On NCCL ≥ 2.30, enable multi-rank-per-GPU — verified
+  working at 2 ranks/GPU on RIKYU (NCCL 2.31.2 via
+  `nvhpc-hpcx-cuda13/26.9`):
+
+  ```sh
+  export NCCL_MULTI_RANK_GPU_ENABLE=1   # NCCL >= 2.30, off by default
+  export NCCL_MAX_CTAS=4                # cap collective SM use (defaults fit ~2 ranks/GPU; retune for more)
+  export NCCL_NVLS_ENABLE=0             # NVLS is unavailable to duplicate-GPU ranks
+  ```
+
+  If it hangs (SM residency deadlock): `NCCL_NET_GDR_LEVEL=LOC` —
+  diagnostics only, costs performance. On NCCL ≤ 2.29 use the fallback:
+  one communicator per GPU — reduce co-tenants into that rank, collective
+  over one rank per GPU, broadcast back.
+- **Inter-node CUDA sends die with "cannot find remote protocol … from
+  cuda/GPU" / `ucp_ep_create failed`:** a per-rank `UCX_NET_DEVICES=mlx5_<i>:1`
+  is set (a GB200 tuning-guide recipe). Unset it; NUMA binding covers NCCL's
+  NIC selection.
+
+MPI-IO, MPS-launch, GPU-slot and `processes_per_node` gotchas: see the MPI
+launch section above.
+
 ## RIKYU conventions
 
 - **Time limits**: max 96h regardless of GPU count; confirm the current
