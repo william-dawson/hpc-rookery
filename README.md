@@ -29,6 +29,9 @@ These integrations have been exercised against their real scheduler.
 
 ## Install
 
+Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+before adding the plugins.
+
 Install the shared `hpc` plugin first, then choose the facility skill packs
 for the machines you use. Each pack is named `hpc-<slug>` and adds skills
 without starting extra MCP servers. You can add more packs later.
@@ -100,6 +103,12 @@ the ones you use by slug. For example:
 
 ### Manual installation for any MCP-capable harness
 
+You can ask your agent to install it for you. Open this repository in your
+agent and say:
+
+> Install HPC Rookery for this harness. Ask me which facilities I use, then
+> set up the MCP servers and the skill packs for those facilities.
+
 If the harness does not support plugins, register `hpc-mcp` and
 `hpc-docs-mcp` using its normal stdio-MCP configuration. From an editable
 checkout, point them at `.venv/bin/hpc-mcp` and `.venv/bin/hpc-docs-mcp`
@@ -111,8 +120,7 @@ plugins/hpc/skills/                    # shared hpc-facilities skill
 plugins/hpc-<selected-slug>/skills/    # one selected facility pack
 ```
 
-The Python package requires Python 3.10 or newer; the supplied plugin
-launcher uses [`uv`](https://docs.astral.sh/uv/).
+The Python package requires Python 3.10 or newer.
 
 ## Configure
 
@@ -128,12 +136,8 @@ file per machine, all in one directory. The minimum is an ssh host:
 - `ssh.host` is a `~/.ssh/config` alias, a `user@hostname`, or
   `"localhost"` if the agent is running directly on that cluster's own
   front-end node (no ssh at all). `RIKYU_HOST` overrides the file.
-- For a remote host, use an SSH alias with OpenSSH connection multiplexing
-  (`ControlMaster auto`, a `ControlPath`, and `ControlPersist 30m`). This
-  reuses one authenticated connection for repeated agent calls, reducing
-  login-node authentication load and making operations faster. The
-  configuring skill can add the exact SSH config block after showing it and
-  receiving confirmation; `ControlMaster no` is an explicit opt-out.
+- For a remote host, use SSH connection multiplexing to reuse one
+  authenticated connection across agent calls, as shown below.
 - Some machines need more. Fugaku requires a project group on every job,
   HOKUSAI requires a project account. **You don't have to look any of this
   up**: any tool call that can't reach a cluster replies with that
@@ -142,6 +146,21 @@ file per machine, all in one directory. The minimum is an ssh host:
 - For documentation search, add `"embedding": {"api_key": "..."}`. Without
   a key — or off the RIKEN network — docs search falls back to keyword
   matching over the same content, so it still works.
+
+For example, add an alias to `~/.ssh/config`, replacing the hostname and
+username with your cluster login details:
+
+```sshconfig
+Host rikyu
+    HostName login.example.edu
+    User your-username
+    ControlMaster auto
+    ControlPath ~/.ssh/%C
+    ControlPersist 30m
+```
+
+With `"ssh": {"host": "rikyu"}`, agent calls reuse this connection. Set
+`ControlMaster no` to disable multiplexing.
 
 You can also just ask the agent to do it: every cluster has a
 `<name>-configuring` skill that walks through this and writes the file for
@@ -164,23 +183,16 @@ all integrations, which is only useful if you can access all of them.
 
 ## Make the work reproducible
 
-An agent session is a good way to figure something out, but the result
-should not live only in the conversation. When you have a workflow worth
-keeping, tell the agent:
+To save a workflow, ask the agent:
 
 > Turn what we just did into a reproducible notebook.
 
-Every cluster has a reproducing skill for this. The agent writes a short,
-linear Jupyter notebook that calls the same tools it used during the
-session, runs it once for real, and caches the results (including downloaded
-files). Later you can run it live again, reuse the cache while editing, or
-replay the whole notebook offline without a cluster account. Keep the
-notebook and its `.hpc_cache/` directory together if you want to share or
-commit the result.
+The agent writes a Jupyter notebook, runs it, and caches the results and
+downloaded files. Keep the notebook and its `.hpc_cache/` directory together
+to share or replay the workflow without cluster access.
 
-For example, a notebook recording a one-GPU check on RIKYU could contain
-these cells. The agent fills in the commit, working directory, and project
-from the actual session; the directory lives under `~/agent/work/`:
+For example, a one-GPU check on RIKYU looks like this. The agent fills in
+the commit, working directory, and project from your session:
 
 ```python
 from pathlib import Path
@@ -218,13 +230,9 @@ hpc.close()
 print(Path("gpus.txt").read_text())
 ```
 
-The first `live` run submits the job and records its results. Change the
-mode to `replay` to run the same cells using the recorded job status and
-downloaded file, with no cluster connection or new job. Use `lazy` while
-editing to reuse cached calls and run any new calls live. Replay needs the
-Python dependencies and pinned server available locally, as well as the
-cache; it reproduces the recorded result, while another `live` run performs
-a fresh computation.
+Use `live` for a fresh run, `lazy` to reuse cached calls while editing, or
+`replay` to read only recorded results without submitting jobs. Replay
+requires the cache, Python dependencies, and pinned server locally.
 
 ## Adding a cluster you have access to?
 
