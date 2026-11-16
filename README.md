@@ -75,32 +75,28 @@ Install once:
 pi install git:github.com/william-dawson/hpc-rookery@main
 ```
 
-Then start `pi` and type `/hpc` to set up the machines — pick the
-facilities you use and the session reloads with their skill packs
-(non-interactive alternative: `/hpc set rikyu,fugaku`). Pi reads this
-repository's root `package.json` as a package manifest and loads
-`pi/extension.ts`, which registers both MCP servers, always contributes the
-shared `hpc-facilities` skill, and contributes the selected facility packs.
-The selection is stored per user in `~/.pi/agent/hpc-rookery.json`. See
-`pi/README.md` for exposure settings, the `fs_rm` confirmation gate, known
-limitations, and overrides.
+Then, inside Pi, open the facility picker:
+
+```text
+/hpc
+```
+
+Choose the facilities you use to load their skill packs.
 
 ### OpenCode
 
-Install the plugin, then pick facilities in-session — no config editing:
+Install once:
 
 ```sh
 opencode plugin add 'github:william-dawson/hpc-rookery#main'
 ```
 
+Then, inside OpenCode, use `/hpc` to list available facilities and select
+the ones you use by slug. For example:
+
 ```text
 /hpc rikyu,tsubame
 ```
-
-The whole repository is the plugin package (root `package.json`), so the
-git install carries the skill packs; `/hpc` persists the selection in
-plugin storage. Details, options, and the checkout-based alternative in
-`opencode/README.md`.
 
 ### Manual installation for any MCP-capable harness
 
