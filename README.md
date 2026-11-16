@@ -63,6 +63,13 @@ catalog. The user may name more than one facility, or choose none yet.
 
 ### Codex plugins
 
+Register the repository as a plugin marketplace once per machine — the
+`hpc@hpc-marketplace` names below resolve through it:
+
+```sh
+codex plugin marketplace add https://github.com/william-dawson/hpc-rookery
+```
+
 Install the base plugin once. It owns the shared `hpc` and `hpc-docs` MCP
 servers and the facility-discovery skill:
 
@@ -89,6 +96,14 @@ marketplace at `.claude-plugin/marketplace.json`. Each package additionally
 has a portable OpenPlugin `plugin.json`; the base `hpc` package has its
 portable `mcp.json`. In every harness, install `hpc` first and only the
 facility packs the user selected.
+
+For Claude Code itself, add the marketplace, then install from it:
+
+```sh
+claude plugin marketplace add william-dawson/hpc-rookery
+claude plugin install hpc@hpc-marketplace
+claude plugin install hpc-rikyu@hpc-marketplace   # one pack per selected facility
+```
 
 ### Pi
 
