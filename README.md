@@ -101,6 +101,22 @@ the ones you use by slug. For example:
 /hpc rikyu,tsubame
 ```
 
+### VS Code (GitHub Copilot Chat)
+
+Open the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P`
+elsewhere) and run **Chat: Add Plugin Marketplace**. Enter this repository's
+URL and press Enter to confirm:
+
+```text
+https://github.com/william-dawson/hpc-rookery
+```
+
+Then browse the marketplace's plugins (for example from **Chat: Manage Plugin
+Marketplaces**), select `hpc-marketplace`, and click **Install** on `hpc`
+first, then on the `hpc-<slug>` packs for your facilities. Once installed, a
+plugin shows an **Installed** badge and lives under
+`~/.copilot/installed-plugins/hpc-marketplace/`.
+
 ### Manual installation for any MCP-capable harness
 
 You can ask your agent to install it for you. Open this repository in your
