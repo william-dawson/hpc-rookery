@@ -47,6 +47,9 @@ JOB_DEFAULTS = {
     # Crux: PBS; the debug queue exists for exactly this (1-4 nodes, up to
     # 2 h, one running job per user) and the account stays user-specific.
     "crux": {"queue_name": "debug", "duration": 600},
+    # ai-hpz: one-node workstation Slurm, single debug partition, no
+    # accounting; the GPU is a GRES, so request one to exercise it.
+    "ai-hpz": {"queue_name": "debug", "duration": 300, "gpus": 1},
 }
 
 CELL2026_GE_JOB = {"queue_name": "all.q", "duration": 300, "gpus": 1}

@@ -1,0 +1,7 @@
+{
+  "slug": "ai-hpz",
+  "display_name": "ai-hpz (hpz workstation)",
+  "scheduler": "slurm",
+  "description": "Single-node Ubuntu workstation with its own no-accounting Slurm (one debug partition, 24 CPUs, ~187 GiB) and one Quadro RTX 5000 requested as a Slurm GRES (--gres=gpu:1); GROMACS 2026 (CUDA) and NVIDIA HPC SDK 24.5 installed.",
+  "live_validated": true
+}

@@ -1,0 +1,71 @@
+{
+  "cluster": "hpz",
+  "site": "ai-hpz workstation",
+  "architecture": "x86_64",
+  "os": "Ubuntu 24.04 LTS",
+  "verification": {
+    "source": "Read live over SSH (scontrol, sinfo, nvidia-smi, gmx --version) and test jobs on 2026-11-25; GPU GRES re-verified after it was added the same day",
+    "hub_port_live_revalidated": false
+  },
+  "hardware": {
+    "nodes": 1,
+    "cpu": "Intel Xeon Gold 6136 (Skylake-SP, AVX-512), 1 socket x 12 cores x 2 threads",
+    "slurm_cpus": 24,
+    "memory_mib": 192117,
+    "gpu": {
+      "model": "Quadro RTX 5000",
+      "count": 1,
+      "memory_mib": 16384,
+      "compute_capability": "7.5",
+      "driver": "535.230.02",
+      "managed_by_slurm": true,
+      "gres": "gpu:quadro_rtx_5000:1"
+    }
+  },
+  "scheduler": {
+    "type": "Slurm",
+    "version": "26.05",
+    "accounting": false,
+    "account_required_in_spec": false,
+    "gpu_request": "--gres=gpu:1 (or --gpus=1); gpu:2 or more is refused at submit",
+    "select": "cons_tres, CR_CORE_MEMORY (CPUs and memory are allocated per job)",
+    "history": "No sacct. Finished jobs are only visible via scontrol for a short time after completion.",
+    "gpu_isolation": "none — no cgroup ConstrainDevices, so jobs without a GPU request can still see the GPU"
+  },
+  "partitions": [
+    {
+      "name": "debug",
+      "default": true,
+      "nodes": 1,
+      "cpus": 24,
+      "memory_mib": 192117,
+      "gpus": 1,
+      "max_time": "UNLIMITED",
+      "gres": "gpu:quadro_rtx_5000:1"
+    }
+  ],
+  "storage": {
+    "home": "/home/<group>/<user> (local disk, shared with the OS root filesystem, ~1.8 TB total)",
+    "agent_work": "~/agent/work",
+    "node_local_scratch": "the whole filesystem is local; there is no separate shared filesystem"
+  },
+  "software": {
+    "modules": {
+      "system": "environment-modules (Tcl), initialised by login shells",
+      "nvhpc": "module use /opt/nvidia/hpc_sdk/modulefiles; then nvhpc/24.5, nvhpc-nompi/24.5, nvhpc-hpcx/24.5, nvhpc-hpcx-cuda12/24.5, nvhpc-openmpi3/24.5, nvhpc-byo-compiler/24.5"
+    },
+    "cuda": "12.4, bundled in the HPC SDK (/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda); no /usr/local/cuda",
+    "gromacs": {
+      "version": "2026.3",
+      "path": "/usr/local/gromacs/bin/gmx",
+      "setup": "sourced automatically by /etc/profile.d/gromacs.sh (GMXRC)",
+      "precision": "mixed",
+      "mpi": "thread-MPI (no gmx_mpi)",
+      "gpu": "CUDA, sm_75",
+      "simd": "AVX_512"
+    },
+    "mpi": "system Open MPI 4.1.6 (/usr/bin/mpirun); srun supports pmi2 and pmix",
+    "python": "/usr/bin/python3 (3.12)",
+    "containers": "docker binary present; no Singularity/Apptainer"
+  }
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > What the machine is",
+    "url": "",
+    "text": "hpz is one workstation, not a cluster. It runs Ubuntu 24.04 and acts as its\nown Slurm controller and its own only compute node. You reach it over SSH\n(the `ai-hpz` alias); the login shell and the jobs run on the same host.\n\n- CPU: one Intel Xeon Gold 6136 (Skylake-SP, AVX-512), 12 cores with two\n  hardware threads each. Slurm counts 24 CPUs.\n- Memory: about 187 GiB (Slurm RealMemory 192117 MiB).\n- GPU: one NVIDIA Quadro RTX 5000, 16 GiB, compute capability 7.5,\n  driver 535.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Slurm on hpz",
+    "url": "",
+    "text": "There is exactly one partition, `debug`. It is the default, has no time\nlimit and contains the single node `hpz`.\n\nSlurm allocates cores and memory per job (cons_tres with CR_CORE_MEMORY), so\nseveral small jobs can share the machine. Ask only for the CPUs and memory a\njob will actually use; a job that asks for all 24 CPUs blocks everyone else.\n\nAccounting is switched off. Consequences:\n\n- There is no `sacct` and no project/account; never set `--account`.\n- A job's status is available from `squeue` while it is queued or running and\n  from `scontrol show job` for a short time after it ends. After that, the\n  output files are the only record.\n- `get_projects` and the allocation tools are unsupported here.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Slurm on hpz > Requesting the GPU",
+    "url": "",
+    "text": "The single GPU is a Slurm generic resource (`gpu:quadro_rtx_5000:1`).\nRequest it with `--gres=gpu:1` (`--gpus=1` also works). Consequences:\n\n- Only one job holds the GPU at a time; a second GPU job waits with reason\n  `Resources` until the first ends. Asking for two GPUs is refused at submit.\n- The job holding the GPU sees it as `CUDA_VISIBLE_DEVICES=0`.\n- Slurm does not hide the GPU from other jobs (no device cgroup is\n  configured). A job that did not request it can still see and use it, so\n  never run GPU code without requesting the GPU — that breaks the\n  reservation for whoever holds it.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Storage",
+    "url": "",
+    "text": "Everything is on one local disk (~1.8 TB, shared with the OS). Home is\n`/home/<group>/<user>`. There is no separate scratch or parallel filesystem\nand no quota is enforced. Keep agent-created files under `~/agent/` and runs\nunder `~/agent/work/<run>/`. Clean up large trajectories when you are done,\nbecause the space is shared with the system.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Software > GROMACS",
+    "url": "",
+    "text": "GROMACS 2026.3 is installed in `/usr/local/gromacs`. Login shells source its\n`GMXRC` from `/etc/profile.d/gromacs.sh`, so `gmx` is already on `PATH` in a\nbatch job. The build:\n\n- mixed precision, AVX-512 SIMD;\n- CUDA GPU support built for sm_75 (the RTX 5000);\n- thread-MPI only. There is no `gmx_mpi`, so do not launch with `mpirun` or\n  `srun -n`. Run one `gmx mdrun` process and set threads with `-ntmpi` and\n  `-ntomp`.\n\nA typical single-GPU run on 8 CPUs: request `--cpus-per-task=8` (one task)\nand run `gmx mdrun -deffnm md -ntmpi 1 -ntomp 8 -nb gpu -pme gpu -bonded gpu\n-update gpu`. Match `-ntomp` to the CPUs Slurm allocated\n(`$SLURM_CPUS_PER_TASK`). Pin threads with `-pin on` only when the job owns\nthe whole machine, otherwise concurrent jobs fight over the same cores.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Software > NVIDIA HPC SDK and CUDA",
+    "url": "",
+    "text": "The NVIDIA HPC SDK 24.5 is installed under `/opt/nvidia/hpc_sdk`, with CUDA\n12.4 bundled inside it. Its module files are not on the default module path:\n\n```bash\nmodule use /opt/nvidia/hpc_sdk/modulefiles\nmodule load nvhpc/24.5        # or nvhpc-nompi, nvhpc-hpcx-cuda12, ...\n```\n\nThere is no `/usr/local/cuda`. `nvcc` comes from the SDK module.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Software > Modules",
+    "url": "",
+    "text": "environment-modules (Tcl) is initialised in login shells. The system module\npath holds only the built-in helper modules; everything useful comes from the\nHPC SDK path above. Batch scripts submitted through the agent run in a login\nshell, so `module` works there.",
+    "id": 6
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Software > MPI, Python, containers",
+    "url": "",
+    "text": "- System Open MPI 4.1.6 at `/usr/bin/mpirun`; Slurm's `srun` supports `pmi2`\n  and `pmix`. With a single node, MPI is rarely needed.\n- Python is the system `python3` (3.12). Use a venv under `~/agent/work/` for\n  extra packages rather than `pip install --user`.\n- There is no Singularity or Apptainer, so the agent's container option does\n  not work here. A `docker` binary exists but is not wired into Slurm.",
+    "id": 7
+  },
+  {
+    "breadcrumb": "ai-hpz (hpz workstation) guide > Common failures",
+    "url": "",
+    "text": "| Symptom | Cause | Fix |\n|---|---|---|\n| `Requested node configuration is not available` at submit | more than one GPU (or more CPUs/memory than the node has) was requested | ask for at most `gpu:1`, 24 CPUs, 192117 MiB |\n| GPU job pends with reason `Resources` | another job holds the GPU | wait, or run on CPU |\n| `gmx: command not found` in a job | script ran without a login shell | `source /usr/local/gromacs/bin/GMXRC` before `gmx` |\n| `nvcc: command not found` | HPC SDK module not loaded | `module use /opt/nvidia/hpc_sdk/modulefiles; module load nvhpc/24.5` |\n| GROMACS fails with GPU out-of-memory | a job that did not request the GPU is using it anyway | find it with `nvidia-smi`; always request the GPU for GPU work |\n| job status says \"not found\" a while after it finished | no accounting; scontrol forgets finished jobs | read the job's output files instead |\n| job pends with reason `Resources` | other jobs hold the CPUs/memory | lower the request or wait |",
+    "id": 8
+  }
+]
