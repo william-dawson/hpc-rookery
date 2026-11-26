@@ -45,7 +45,8 @@ Two consequences worth knowing before you change anything here:
   which facility it's calling.
 - **A facility PR touches exactly one directory: `facilities/<slug>/`.**
   See PORTING.md §11 for the full list of what a facility PR does *not*
-  need to touch. If a change seems to require editing `hpc_agent_core/` or
+  need to touch. (A fork's separate repoint commit is the one other
+  change; see "Forks are the main usage pattern" below.) If a change seems to require editing `hpc_agent_core/` or
   `hpc_mcp/`, that's a signal to reconsider the approach, not a green light
   to edit them — those files serve every facility at once.
 - **Clarity over cleverness.** A little facility-specific code in one
@@ -64,6 +65,35 @@ Two consequences worth knowing before you change anything here:
 - **Never write to stdout in server code** — MCP stdio transport uses it
   for JSON-RPC; log to stderr only. `remotemanager`'s progress output is
   redirected by `middleware.py`.
+
+## Forks are the main usage pattern
+
+Contributors often need a facility working immediately, so most ports live
+in a fork first and only sometimes become a PR here. A fresh fork still
+launches the **upstream** server (`plugins/hpc/.mcp.json` and the generated
+`mcp.json`, skills and manifests all say
+`git+https://github.com/william-dawson/hpc-rookery.git@main`), so a new
+facility added there is never loaded. A fork needs a **repoint**: replace
+`william-dawson/hpc-rookery` with `<owner>/hpc-rookery` in the *sources* —
+`templates/skills/{configuring,reproducing}.md.tmpl`,
+`scripts/render_plugins.py`, `plugins/hpc/.mcp.json`, `pi/extension.ts`,
+`opencode/src/index.ts`, `tests/notebook_client.py`, `package.json`, `pyproject.toml` and the READMEs — then
+run `render_skills.py` and `render_plugins.py`. Never hand-edit generated
+`SKILL.md`/`mcp.json` files; the next render reverts them and CI's
+generated-output check fails. The exact recipe is PORTING.md §0b.
+
+Rules that follow from this, for both fork work and work on this repo:
+
+- **The repoint is its own commit**, never mixed with a facility. That keeps
+  `git cherry-pick <facility commit>` onto upstream `main` clean, so a fork
+  port can still become a PR here. Don't open an upstream PR from a branch
+  containing it.
+- **Don't undo a fork's repoint** when you see `<owner>/hpc-rookery` in its
+  files — it is the fork working as intended. Conversely, in *this* repo,
+  new code that needs the repo URL should keep it in one of the files above,
+  not scatter a new copy, so a fork has one fewer place to repoint.
+- A fork PR can't be written to by CI, so a fork contributor runs the
+  generators themselves (the CI message says so).
 
 ## This repo must never publish `hpc_agent_core` to PyPI
 
