@@ -117,6 +117,33 @@ first, then on the `hpc-<slug>` packs for your facilities. Once installed, a
 plugin shows an **Installed** badge and lives under
 `~/.copilot/installed-plugins/hpc-marketplace/`.
 
+### Hermes
+
+Hermes installs each plugin straight from this repository by path (it has no
+marketplace step for this repo), so install the shared `hpc` plugin and then
+one command per facility you use:
+
+```sh
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-<slug> --enable
+```
+
+For example, for RIKYU and TSUBAME4.0:
+
+```sh
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-rikyu --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-tsubame --enable
+```
+
+The `hpc` plugin alone gives you the MCP tools and the facility-discovery
+skill but none of the per-facility skills, so don't stop after the first
+command. Hermes may show a security-scan caution on the facility packs
+because the configuring skill has the agent add an alias to `~/.ssh/config`
+and create `~/.ssh/controlmasters` (with your approval) when you set up SSH
+access. Start a new session afterwards. To add a facility later, run just
+its line; to see what is installed, run `hermes plugins list`.
+
 ### Manual installation for any MCP-capable harness
 
 You can ask your agent to install it for you. Open this repository in your
