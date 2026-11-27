@@ -65,16 +65,20 @@ def is_local_host(host: str) -> bool:
 
 
 def norm_path(path: str) -> str:
-    """Strip a leading ~ so remote paths resolve under the home directory.
+    """Normalize a leading home-directory shorthand to a relative path.
 
     run_command sets CWD to $HOME, so relative paths already resolve there.
-    shlex.quote wraps in single quotes which suppresses tilde expansion, so
-    ~/foo must become foo before quoting; bare ~ becomes '.'.
+    Scheduler directives are not shell-evaluated, while shell renderers may
+    quote paths and suppress expansion.  Therefore accept the conventional
+    home forms (``~``, ``$HOME``, and ``${HOME}``) and turn them into paths
+    relative to that known working directory instead of emitting a literal
+    dollar sign or tilde.
     """
-    if path == "~":
+    if path in ("~", "$HOME", "${HOME}"):
         return "."
-    if path.startswith("~/"):
-        return path[2:]
+    for prefix in ("~/", "$HOME/", "${HOME}/"):
+        if path.startswith(prefix):
+            return path[len(prefix):]
     return path
 
 

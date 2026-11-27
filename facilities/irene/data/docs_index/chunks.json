@@ -2,49 +2,61 @@
   {
     "breadcrumb": "TGCC Irene",
     "url": "",
-    "text": "Irene is a CPU-first supercomputer at CEA's TGCC. Its scheduler is Slurm\nunderneath, but users work through TGCC Bridge: batch scripts contain `#MSUB`\ndirectives, `ccc_msub` submits them, and parallel programs launch with\n`ccc_mprun`.",
+    "text": "Irene is a CPU-first supercomputer at CEA's TGCC. Its scheduler is Slurm\nunderneath, but users work through TGCC Bridge: batch scripts contain `#MSUB`\ndirectives, `ccc_msub` submits them, and parallel programs launch with\n`ccc_mprun`.\n\nLive values — queue occupancy, installed module versions, project\nconsumption — should be read from the machine rather than from this guide.\nThe site documentation this was written from is dated 2026-04-27; hardware\nfacts are stable, but partitions, quotas, QoS limits and accounting are\noperational data that moves.",
     "id": 0
   },
   {
     "breadcrumb": "TGCC Irene > Partitions",
     "url": "",
-    "text": "The normal target is `rome`, recorded as 2,286 AMD Rome nodes with 128 cores\nand about 228 GiB per node. Use the specialized partitions only when the\nworkload needs them:\n\n| partition | recorded shape | purpose |\n|---|---|---|\n| `rome` | 128 CPU cores/node | ordinary CPU, MPI, and hybrid production |\n| `xlarge` | 112 cores, about 3 TiB, one P100 | single-node large-memory work |\n| `v100` | 40 cores and four V100 GPUs/node | multi-GPU work |\n| `v100l` / `v100l-os` | 36 cores and one V100/node | GPU work with more memory per GPU |\n| `v100xl` | 72 cores, about 2.9 TiB, one V100 | large-memory GPU work |\n\nThese shapes came from the source port and still need a live refresh with\n`ccc_mpinfo`.",
+    "text": "The normal target is `rome`, recorded as 2,286 AMD Rome nodes with 128 cores\nand about 228 GiB per node. Use the specialized partitions only when the\nworkload needs them:\n\n| partition | recorded shape | purpose |\n|---|---|---|\n| `rome` | 128 CPU cores/node, ~228 GiB | ordinary CPU, MPI, and hybrid production |\n| `xlarge` | 112 cores, about 3 TiB, one P100 | single-node large-memory work |\n| `v100` | 40 cores and four V100 GPUs/node | multi-GPU work |\n| `v100l` / `v100l-os` | 36 cores and one V100/node | GPU work with more memory per GPU |\n| `v100xl` | 72 cores, about 2.9 TiB, one V100 | large-memory GPU work |\n\n`xlarge` has five nodes, `v100` thirty-two, `v100l` thirty, and `v100xl`\ntwo — so the specialized partitions are small and contended. Default to\nCPU/MPI on `rome`; reach for a GPU partition only when the code actually\noffloads to NVIDIA GPUs, and for `xlarge` only when the bottleneck is memory\ninside one node.\n\nThese shapes came from the source port and still need a live refresh with\n`ccc_mpinfo`.",
     "id": 1
   },
   {
     "breadcrumb": "TGCC Irene > Every job needs three site choices",
     "url": "",
-    "text": "An Irene job must declare:\n\n- `attributes.queue_name`, rendered as `#MSUB -q`; a partial request defaults\n  to `rome`.\n- `attributes.account`, rendered as `#MSUB -A`; use `get_projects` because a\n  project is only valid on the partitions listed by `ccc_compuse`.\n- `attributes.custom_attributes.filesystems`, rendered as `#MSUB -m`.\n  `scratch,work` is the normal default; include `store` only when needed.\n\n`resources.process_count` becomes total tasks (`-n`),\n`cpu_cores_per_process` becomes cores per task (`-c`), `node_count` becomes\n`-N`, and `exclusive_node_use` becomes `-x`. Durations are rendered as total\nseconds for `-T`. Set custom `qos` when the current `ccc_mqinfo` output shows\nthat it is appropriate.\n\nFor a parallel or threaded job, the backend supplies `ccc_mprun` when needed.\nThe submission directory is `${BRIDGE_MSUB_PWD}`. Default output names are\n`irene_<job-id>.o` and `irene_<job-id>.e`.",
+    "text": "An Irene job must declare:\n\n- `attributes.queue_name`, rendered as `#MSUB -q`; a partial request defaults\n  to `rome`.\n- `attributes.account`, rendered as `#MSUB -A`; use `get_projects` because a\n  project is only valid on the partitions listed by `ccc_compuse`.\n- `attributes.custom_attributes.filesystems`, rendered as `#MSUB -m`.\n  `scratch,work` is the normal default; include `store` only when needed.\n  Without `-m`, compute nodes cannot reach scratch, work or store at all.\n\n`resources.process_count` becomes total tasks (`-n`),\n`cpu_cores_per_process` becomes cores per task (`-c`), `node_count` becomes\n`-N`, and `exclusive_node_use` becomes `-x`. Durations are rendered as total\nseconds for `-T`. Set custom `qos` when the current `ccc_mqinfo` output shows\nthat it is appropriate.\n\nFor a parallel or threaded job, the backend supplies `ccc_mprun` when needed.\nThe submission directory is `${BRIDGE_MSUB_PWD}`. Default output names are\n`irene_<job-id>.o` and `irene_<job-id>.e`.",
     "id": 2
+  },
+  {
+    "breadcrumb": "TGCC Irene > Every job needs three site choices > The underlying directives",
+    "url": "",
+    "text": "Worth knowing when reading someone else's script, or writing one by hand:\n\n| directive | meaning |\n|---|---|\n| `-r <name>` | job name |\n| `-q <partition>` | partition — **mandatory** |\n| `-A <project>` | project charged — **mandatory** |\n| `-m <filesystems>` | filesystems the job needs — **mandatory** |\n| `-n <tasks>` | total parallel tasks |\n| `-c <cores>` | cores per task (OpenMP threads, memory, or GPUs) |\n| `-N <nodes>` | node count; Bridge usually infers it |\n| `-x` | exclusive node use |\n| `-T <seconds>` | wall time; defaults to 7200 |\n| `-Q <qos>` | QoS, e.g. `normal`, `test`, `long` |\n| `-E \"<slurm opts>\"` | pass raw Slurm options through Bridge |\n\nThe documented 7200-second default is rarely what you meant, and an accurate\nwall time gets a job backfilled sooner, so set `-T` deliberately.\n\nA plain MPI job looks like this:\n\n```bash\n#!/bin/bash\n#MSUB -r MyJob_Para\n#MSUB -n 32\n#MSUB -T 1800\n#MSUB -o example_%I.o\n#MSUB -e example_%I.e\n#MSUB -q rome\n#MSUB -A <project>\n#MSUB -m scratch,work\nset -x\ncd ${BRIDGE_MSUB_PWD}\nccc_mprun ./a.out\n```\n\nA hybrid MPI/OpenMP job asks for tasks with `-n`, cores per task with `-c`,\nand sets `OMP_NUM_THREADS` to match `-c`.\n\nBesides `BRIDGE_MSUB_PWD`, Bridge sets `BRIDGE_MSUB_JOBID`,\n`BRIDGE_MSUB_MAXTIME`, `BRIDGE_MSUB_NPROC`, `BRIDGE_MSUB_NCORE` and\n`BRIDGE_MSUB_REQNAME` inside a job.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "TGCC Irene > Connecting and interactive use",
+    "url": "",
+    "text": "SSH details are site- and project-specific: configure an alias such as\n`irene` in `~/.ssh/config`, then point `ssh.host` at that alias.\n\nLogin nodes are shared. They are for editing, compiling modest code, staging\nfiles, checking queues and submitting jobs. Anything heavier than a laptop\nworkload belongs in an allocation.\n\nTwo interactive modes are documented:\n\n- `ccc_mprun -K -p <partition> -n <tasks> -T <seconds> -A <project>` holds an\n  allocation while leaving you on the login node; launch steps inside it with\n  `ccc_mprun`.\n- `ccc_mprun -s -p <partition> -c <cores> -m <filesystems>` opens a shell on a\n  compute node. Single-node only, and the right tool for compiling,\n  post-processing and short threaded work.\n\nRemote visualization is `ccc_visu virtual -p <partition>` or\n`ccc_visu console -p <partition>`.",
+    "id": 4
   },
   {
     "breadcrumb": "TGCC Irene > GPU allocation",
     "url": "",
-    "text": "Bridge allocates GPUs indirectly through cores per task. The relevant live\nratio is cores per node divided by GPUs per node (`CpN/GpN` in\n`ccc_mpinfo`). A job-total `resources.gpus` can be translated when GPUs divide\nevenly across its tasks; otherwise state `cpu_cores_per_process` explicitly\nafter checking the live ratio. GPU code still launches with `ccc_mprun`.",
-    "id": 3
+    "text": "Bridge allocates GPUs **indirectly, through cores per task** — there is no\nGPU count flag. The ratio is cores per node divided by GPUs per node, the\n`CpN` and `GpN` columns of `ccc_mpinfo`. On a partition with 128 cores and\nfour GPUs per node, that is 32 cores per GPU:\n\n- `-n 1 -c 32` → one GPU\n- `-n 1 -c 64` → two GPUs\n- `-n 4 -c 32` → four GPUs across four tasks\n\nA job-total `resources.gpus` can be translated when GPUs divide evenly across\nits tasks; otherwise state `cpu_cores_per_process` explicitly after checking\nthe live ratio. Load `nvhpc` for NVIDIA compilers and GPU libraries. GPU code\nstill launches with `ccc_mprun`, and topology-aware binding goes through\nBridge, e.g. `#MSUB -E \"--gpu-bind=closest\"`.",
+    "id": 5
   },
   {
     "breadcrumb": "TGCC Irene > Projects, status, and accounting",
     "url": "",
-    "text": "`ccc_compuse` lists project/partition associations and fair-share standing;\nthe backend verifies the chosen combination again immediately before\nsubmission. `ccc_mpp -u $USER` shows live jobs, while `ccc_macct <job-id>`\nprovides finished-job accounting. `ccc_mdel` cancels jobs and `ccc_malter -T`\nchanges a queued or running job's time limit.\n\nTGCC discourages scheduler polling faster than roughly one or two aggregate\nqueries per minute and prohibits `watch` on scheduler commands. Completed jobs\nare therefore queried by ID rather than aggressively polled.",
-    "id": 4
+    "text": "`ccc_compuse` lists project/partition associations and fair-share standing;\nthe backend verifies the chosen combination again immediately before\nsubmission. `ccc_myproject` reports project consumption. `ccc_mpp -u $USER`\nand `ccc_mstat -u` show live jobs, while `ccc_macct <job-id>` provides\nfinished-job accounting — memory, steps, elapsed time, state, and energy\nwhere available. `ccc_mdel` cancels jobs and `ccc_malter -T` reduces a queued\nor running job's time limit.\n\nConsumption cuts both ways, which is worth telling a user before they sit on\nan allocation: under-consumption can get awarded hours reduced for some\nproject types, while over-consumption lowers priority and can leave jobs\nrunning only as bonus jobs.\n\nTGCC discourages scheduler polling faster than roughly one or two aggregate\nqueries per minute, and explicitly prohibits `watch` on scheduler or Bridge\ncommands. Completed jobs are therefore queried by ID rather than aggressively\npolled.",
+    "id": 6
   },
   {
     "breadcrumb": "TGCC Irene > Storage",
     "url": "",
-    "text": "HOME is small and backed up. SCRATCH is fast Lustre with a purge policy, WORK\nis persistent but not backed up, and STORE is an HSM-backed archive. Bridge's\nmandatory `-m` declaration controls which of these are visible to a job. TMP\nand SHM are allocation-lifetime temporary spaces. Use `ccc_quota` for current\nquotas and `ccc_will_purge` to preview purge candidates.",
-    "id": 5
+    "text": "Bridge's mandatory `-m` declaration controls which of these a job can see.\n\n| space | kind | notes |\n|---|---|---|\n| HOME | NFS, backed up | small — 5 GB documented. Sources and submit scripts |\n| SCRATCH | fast Lustre | 100 TB and 2M inodes per group documented. **Purged** |\n| WORK | Lustre, not backed up | shared sources, binaries, working data |\n| STORE | Lustre + HSM | archive; prefer large or packed files |\n| TMP | local zram | purged after each job |\n| SHM | tmpfs, ~half of RAM | allocation lifetime; recommended for small temp files |\n\nSCRATCH purges files not accessed for 60 days and removes empty directories\nolder than 30 days — so results left there will disappear. `ccc_quota` shows\ncurrent quotas and `ccc_will_purge` previews purge candidates.\n\nFor STORE's HSM workflows use `ccc_hsm`, `ccc_pack` and `ccc_unpack`. For\nfiles larger than about 10 GB where parallel I/O benefits from striping, use\n`lfs setstripe`.",
+    "id": 7
   },
   {
     "breadcrumb": "TGCC Irene > Software and containers",
     "url": "",
-    "text": "The `ccc` module supplies the site environment. Data modules define variables\nsuch as `CCCSCRATCHDIR`, `CCCWORKDIR`, and `CCCSTOREDIR`. Open MPI and Wi4MPI\nare the commonly supervised MPI paths; query `module avail` for current\nversions. TGCC containers use pcocc and run in batch as\n`ccc_mprun -C <image> -- <command>`.",
-    "id": 6
+    "text": "The `ccc` module supplies the site environment and is mandatory. `datadir/own`\nand `dfldatadir/own` define the data-space variables `CCCSCRATCHDIR`,\n`CCCWORKDIR` and `CCCSTOREDIR`; shared spaces use `datadir/<space>`,\n`dfldatadir/<space>` and `extenv/<space>`.\n\nOpen MPI and Wi4MPI are the supervised, recommended MPI paths; Intel MPI and\nothers are provided best-effort. Compile with `mpicc`, `mpic++`, `mpif77` or\n`mpif90` and launch with `ccc_mprun`.\n\nModules worth knowing: `nvhpc`, `mpi/openmpi`, `mpi/intelmpi`, `mpi/wi4mpi`,\n`mkl`, `scalapack`, `fftw3/gnu`, `fftw3/mkl`, plus Python, Julia, profilers,\ndebuggers and visualization tools. Query `module avail` or\n`module help <product>` for current versions — installed products change.\n\nContainers use **pcocc**, not Apptainer or Singularity. Build an OCI image\nwith Docker or Podman elsewhere, copy it over, and import it:\n\n```bash\npcocc-rs image import docker-archive:my_image.tar my_image\n```\n\nRun it locally with `pcocc-rs run my_image -- <cmd>`, or in a batch job\nthrough Bridge with `ccc_mprun -C my_image -- <cmd>`. Cluster data spaces are\nmounted by default; extra mounts pass through Bridge as\n`-E '--ctr-mount src=<source>,dst=<target>'`.",
+    "id": 8
   },
   {
     "breadcrumb": "TGCC Irene > Validation status",
     "url": "",
     "text": "The separate IreneAgent migration was checked through offline rendering and\nsynthetic parser equivalence, not a live TGCC connection. This hub port also\nhas not submitted a real Irene job. Its SSH/passfile path, current Bridge\noutput, project parser, resource parser, and tiny job workflow must all be\nchecked live before the integration is marked tested.",
-    "id": 7
+    "id": 9
   }
 ]

@@ -1,96 +1,156 @@
 # HPC Rookery
 
-HPC Agent Hub is a small shared plugin plus optional facility skill packs for
-working with multiple supercomputers. From
-your own computer, an AI coding agent can connect to a supported facility,
-inspect and transfer files, compile software, submit and monitor batch jobs,
-and search a guide written for that machine. It works with MCP-capable agent
-harnesses such as Claude Code, Codex, OpenCode, and Cline.
+HPC Rookery is a small shared plugin plus optional facility skill packs for
+working with multiple supercomputers from AI coding agents such as Codex,
+Claude Code, Pi, OpenCode, etc. From your own computer, an AI coding agent
+can connect to a supported facility, inspect and transfer files, compile
+software, submit and monitor batch jobs, and search a guide written for
+that machine.
 
 https://github.com/user-attachments/assets/770e1f11-01c7-48f3-8c89-70efc3722e95
 
-The plugin starts two MCP servers: `hpc-mcp` provides facility information,
-filesystem operations, and scheduler tools; `hpc-docs-mcp` searches the
-bundled machine guides. Every operation names its target explicitly — for
-example, `submit_job(facility="rikyu", ...)` or
-`search_docs(facility="fugaku", ...)`. The agent calls `get_facilities()`
-when it does not already know which machine you mean.
+The facilities below have been live-tested. Ports [awaiting live
+validation](#awaiting-live-validation) are listed near the end of this README.
 
-Supported facilities are grouped by their current validation status. An
-offline-only port is useful for review and script generation, but should not
-be treated as operationally proven until its live checks pass.
-
-<!-- FACILITY_TABLE:START -->
+<!-- FACILITY_TABLE:START live -->
 ### Live-tested facilities
 
 These integrations have been exercised against their real scheduler.
 
 | slug | facility | scheduler | description |
 |---|---|---|---|
+| `crux` | Crux (ALCF) | pbs | Argonne ALCF Crux: 256-node HPE Cray EX AMD Rome CPU system, PBS Professional with sbank accounting, mandatory project and filesystems directives; reached over a multiplexed SSH connection the user authenticates once with a one-time passcode. |
 | `fugaku` | Fugaku | pjm | 158,976-node A64FX (Arm SVE) system, Fujitsu PJM scheduler, no GPUs; a project group is mandatory on every job. |
 | `hokusai` | HOKUSAI BigWaterfall2 (HBW2) | slurm | CPU-first Slurm cluster (312-node MPC, large-memory, H100 GPU subsystems); a project account is mandatory on every job. |
 | `miyabi` | Miyabi (JCAHPC) | pbs | JCAHPC CPU/GH200 system with PBS Professional, full-GPU and MIG queues; reached over a multiplexed SSH connection the user authenticates once with a one-time code. |
 | `rccs-cloud` | R-CCS Cloud | slurm | Heterogeneous ~20-partition cluster (CPU/NVIDIA/AMD/Intel GPU), Slurm with accounting. |
 | `rikyu` | RIKYU (RIKEN AI4S / GB200) | slurm | RIKEN AI4S GB200 GPU cluster, Slurm with accounting, job-total GPU request. |
-
-### Awaiting live validation
-
-These ports register and pass the offline test suite, but have not yet
-completed an end-to-end check against the current live system.
-
-| slug | facility | scheduler | description |
-|---|---|---|---|
-| `cell2026` | cell2026 (Shinobu Lab) | gridengine + slurm | Dual-scheduler GPU cluster: Grid Engine on helix/kinase with managed RTX A4000s and durable qacct, plus no-accounting Slurm on beta/serine with unmanaged RTX 4000 Ada/RTX 5090 GPUs. |
-| `irene` | Irene (CEA TGCC) | bridge | CEA TGCC CPU-first system with AMD Rome, large-memory, and NVIDIA GPU partitions, accessed through the Bridge #MSUB/ccc_* scheduler interface. |
-| `octopus` | Octopus (RIKEN R-CCS) | slurm | Four-node, dual-vendor GPU cluster: three NVIDIA H200 nodes and one AMD MI300X node, Slurm accounting, and vendor-specific container passthrough. |
-| `roquo` | ROQUO (RIKEN R-CCS) | slurm | GB200 GPU system with aarch64 compute nodes and x86_64 login/work nodes, Slurm with accounting, --gres=gpu:N and QOS-tiered wall times. |
-| `tsubame` | TSUBAME4.0 (Science Tokyo) | gridengine | Science Tokyo's GPU-first H100 system, scheduled by Altair Grid Engine using fixed resource-type slices and TSUBAME group points. |
 <!-- FACILITY_TABLE:END -->
 
 ## Install
 
-Clone or download this repository, open its directory in your coding agent,
-then tell the agent:
+Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+before adding the plugins.
 
-> Install the plugins and skill files associated with this repository.
+Install the shared `hpc` plugin first, then choose the facility skill packs
+for the machines you use. Each pack is named `hpc-<slug>` and adds skills
+without starting extra MCP servers. You can add more packs later.
 
-**Agent instruction:** before installing any facility skills, ask the user
-which facility slugs they want. For example: “Which facility skill packs
-should I include? Choose from `rikyu`, `fugaku`, `hokusai`, `miyabi`,
-`rccs-cloud`, `cell2026`, `irene`, `octopus`, and `tsubame`.” Do not install
-all facility packs by default, and do not infer access from the facility
-catalog. The user may name more than one facility, or choose none yet.
+### Codex
 
-### Codex plugins
-
-Install the base plugin once. It owns the shared `hpc` and `hpc-docs` MCP
-servers and the facility-discovery skill:
+Register this repository as a marketplace once from your terminal:
 
 ```sh
-codex plugin add hpc@hpc-marketplace
+codex plugin marketplace add https://github.com/william-dawson/hpc-rookery
 ```
 
-Then install one skill-only pack per facility the user selected:
+Then, inside Codex, open the [plugin browser](https://learn.chatgpt.com/docs/plugins#plugin-browser-in-codex-cli):
+
+```text
+/plugins
+```
+
+Select `hpc-marketplace`, install `hpc`, and choose only the `hpc-<slug>`
+packs for your facilities. Start a new session to use their skills and tools.
+
+### Claude Code
+
+Inside a Claude Code session, add the marketplace:
+
+```text
+/plugin marketplace add william-dawson/hpc-rookery
+```
+
+Then open the [plugin browser](https://code.claude.com/docs/en/discover-plugins):
+
+```text
+/plugin
+```
+
+In Discover, select `hpc-marketplace`, install `hpc`, and choose only the
+`hpc-<slug>` packs for your facilities.
+
+### Pi
+
+Install once:
 
 ```sh
-codex plugin add hpc-rikyu@hpc-marketplace
-codex plugin add hpc-fugaku@hpc-marketplace
+pi install git:github.com/william-dawson/hpc-rookery@main
 ```
 
-The facility packs do not register MCP servers, so they never duplicate or
-conflict with the base plugin. Their names are always `hpc-<slug>`.
+Then, inside Pi, open the facility picker:
 
-### Claude Code and OpenPlugin compatibility
+```text
+/hpc
+```
 
-Every package uses the same root `skills/` layout and also includes the
-native manifests expected by Codex (`.codex-plugin/plugin.json`) and Claude
-Code (`.claude-plugin/plugin.json`). The repository supplies a Claude Code
-marketplace at `.claude-plugin/marketplace.json`. Each package additionally
-has a portable OpenPlugin `plugin.json`; the base `hpc` package has its
-portable `mcp.json`. In every harness, install `hpc` first and only the
-facility packs the user selected.
+Choose the facilities you use to load their skill packs.
+
+### OpenCode
+
+Install once:
+
+```sh
+opencode plugin add 'github:william-dawson/hpc-rookery#main'
+```
+
+Then, inside OpenCode, use `/hpc` to list available facilities and select
+the ones you use by slug. For example:
+
+```text
+/hpc rikyu,tsubame
+```
+
+### VS Code (GitHub Copilot Chat)
+
+Open the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P`
+elsewhere) and run **Chat: Add Plugin Marketplace**. Enter this repository's
+URL and press Enter to confirm:
+
+```text
+https://github.com/william-dawson/hpc-rookery
+```
+
+Then browse the marketplace's plugins (for example from **Chat: Manage Plugin
+Marketplaces**), select `hpc-marketplace`, and click **Install** on `hpc`
+first, then on the `hpc-<slug>` packs for your facilities. Once installed, a
+plugin shows an **Installed** badge and lives under
+`~/.copilot/installed-plugins/hpc-marketplace/`.
+
+### Hermes
+
+Hermes installs each plugin straight from this repository by path (it has no
+marketplace step for this repo), so install the shared `hpc` plugin and then
+one command per facility you use:
+
+```sh
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-<slug> --enable
+```
+
+For example, for RIKYU and TSUBAME4.0:
+
+```sh
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-rikyu --enable
+hermes plugins install william-dawson/hpc-rookery/plugins/hpc-tsubame --enable
+```
+
+The `hpc` plugin alone gives you the MCP tools and the facility-discovery
+skill but none of the per-facility skills, so don't stop after the first
+command. Hermes may show a security-scan caution on the facility packs
+because the configuring skill has the agent add an alias to `~/.ssh/config`
+and create `~/.ssh/controlmasters` (with your approval) when you set up SSH
+access. Start a new session afterwards. To add a facility later, run just
+its line; to see what is installed, run `hermes plugins list`.
 
 ### Manual installation for any MCP-capable harness
+
+You can ask your agent to install it for you. Open this repository in your
+agent and say:
+
+> Install HPC Rookery for this harness. Ask me which facilities I use, then
+> set up the MCP servers and the skill packs for those facilities.
 
 If the harness does not support plugins, register `hpc-mcp` and
 `hpc-docs-mcp` using its normal stdio-MCP configuration. From an editable
@@ -103,8 +163,7 @@ plugins/hpc/skills/                    # shared hpc-facilities skill
 plugins/hpc-<selected-slug>/skills/    # one selected facility pack
 ```
 
-The Python package requires Python 3.10 or newer; the supplied plugin
-launcher uses [`uv`](https://docs.astral.sh/uv/).
+The Python package requires Python 3.10 or newer.
 
 ## Configure
 
@@ -120,12 +179,8 @@ file per machine, all in one directory. The minimum is an ssh host:
 - `ssh.host` is a `~/.ssh/config` alias, a `user@hostname`, or
   `"localhost"` if the agent is running directly on that cluster's own
   front-end node (no ssh at all). `RIKYU_HOST` overrides the file.
-- For a remote host, use an SSH alias with OpenSSH connection multiplexing
-  (`ControlMaster auto`, a `ControlPath`, and `ControlPersist 30m`). This
-  reuses one authenticated connection for repeated agent calls, reducing
-  login-node authentication load and making operations faster. The
-  configuring skill can add the exact SSH config block after showing it and
-  receiving confirmation; `ControlMaster no` is an explicit opt-out.
+- For a remote host, use SSH connection multiplexing to reuse one
+  authenticated connection across agent calls, as shown below.
 - Some machines need more. Fugaku requires a project group on every job,
   HOKUSAI requires a project account. **You don't have to look any of this
   up**: any tool call that can't reach a cluster replies with that
@@ -134,6 +189,21 @@ file per machine, all in one directory. The minimum is an ssh host:
 - For documentation search, add `"embedding": {"api_key": "..."}`. Without
   a key — or off the RIKEN network — docs search falls back to keyword
   matching over the same content, so it still works.
+
+For example, add an alias to `~/.ssh/config`, replacing the hostname and
+username with your cluster login details:
+
+```sshconfig
+Host rikyu
+    HostName login.example.edu
+    User your-username
+    ControlMaster auto
+    ControlPath ~/.ssh/%C
+    ControlPersist 30m
+```
+
+With `"ssh": {"host": "rikyu"}`, agent calls reuse this connection. Set
+`ControlMaster no` to disable multiplexing.
 
 You can also just ask the agent to do it: every cluster has a
 `<name>-configuring` skill that walks through this and writes the file for
@@ -156,19 +226,56 @@ all integrations, which is only useful if you can access all of them.
 
 ## Make the work reproducible
 
-An agent session is a good way to figure something out, but the result
-should not live only in the conversation. When you have a workflow worth
-keeping, tell the agent:
+To save a workflow, ask the agent:
 
 > Turn what we just did into a reproducible notebook.
 
-Every cluster has a reproducing skill for this. The agent writes a short,
-linear Jupyter notebook that calls the same tools it used during the
-session, runs it once for real, and caches the results (including downloaded
-files). Later you can run it live again, reuse the cache while editing, or
-replay the whole notebook offline without a cluster account. Keep the
-notebook and its `.hpc_cache/` directory together if you want to share or
-commit the result.
+The agent writes a Jupyter notebook, runs it, and caches the results and
+downloaded files. Keep the notebook and its `.hpc_cache/` directory together
+to share or replay the workflow without cluster access.
+
+For example, a one-GPU check on RIKYU looks like this. The agent fills in
+the commit, working directory, and project from your session:
+
+```python
+from pathlib import Path
+from hpc_agent_core.client import connect_sync, pinned_params
+
+hpc = connect_sync(
+    pinned_params(
+        "https://github.com/william-dawson/hpc-rookery.git",
+        "hpc-mcp",
+        ref="<commit-used-in-the-session>",
+    ),
+    mode="live",
+    cache_dir="./.hpc_cache/gpu-check",
+)
+```
+
+```python
+workdir = "/home/<user>/agent/work/gpu-check"
+hpc.fs_mkdir(facility="rikyu", path=workdir)
+job = hpc.submit_job(facility="rikyu", spec={
+    "name": "gpu-check",
+    "directory": workdir,
+    "executable": "nvidia-smi -L > gpus.txt",
+    "resources": {"gpus": 1},
+    "attributes": {"duration": "00:01:00", "account": "<project>"},
+})
+status = hpc.wait_for_job(job["job_id"], facility="rikyu")
+assert status["status"]["state"] == "completed", status
+hpc.fs_download(
+    facility="rikyu",
+    remote_path=f"{workdir}/gpus.txt",
+    local_path="./gpus.txt",
+)
+hpc.close()
+print(Path("gpus.txt").read_text())
+```
+
+Use `live` for a fresh run, `lazy` to reuse cached calls while editing, or
+`replay` to read only recorded results without submitting jobs. Replay
+requires the cache, Python dependencies, and pinned server locally.
 
 ## Adding a cluster you have access to?
 
@@ -237,6 +344,21 @@ python scripts/render_facility_tables.py   # after editing facility.json
 python scripts/render_skills.py            # after editing skill_notes/
 python scripts/render_plugins.py           # after adding a facility
 ```
+
+<!-- FACILITY_TABLE:START awaiting -->
+## Awaiting live validation
+
+These ports register and pass the offline test suite, but have not yet
+completed an end-to-end check against the current live system.
+
+| slug | facility | scheduler | description |
+|---|---|---|---|
+| `cell2026` | cell2026 (Shinobu Lab) | gridengine + slurm | Dual-scheduler GPU cluster: Grid Engine on helix/kinase with managed RTX A4000s and durable qacct, plus no-accounting Slurm on beta/serine with unmanaged RTX 4000 Ada/RTX 5090 GPUs. |
+| `irene` | Irene (CEA TGCC) | bridge | CEA TGCC CPU-first system with AMD Rome, large-memory, and NVIDIA GPU partitions, accessed through the Bridge #MSUB/ccc_* scheduler interface. |
+| `octopus` | Octopus (RIKEN R-CCS) | slurm | Four-node, dual-vendor GPU cluster: three NVIDIA H200 nodes and one AMD MI300X node, Slurm accounting, and vendor-specific container passthrough. |
+| `roquo` | ROQUO (RIKEN R-CCS) | slurm | GB200 GPU system with aarch64 compute nodes and x86_64 login/work nodes, Slurm with accounting, --gres=gpu:N and QOS-tiered wall times. |
+| `tsubame` | TSUBAME4.0 (Science Tokyo) | gridengine | Science Tokyo's GPU-first H100 system, scheduled by Altair Grid Engine using fixed resource-type slices and TSUBAME group points. |
+<!-- FACILITY_TABLE:END -->
 
 ## License
 

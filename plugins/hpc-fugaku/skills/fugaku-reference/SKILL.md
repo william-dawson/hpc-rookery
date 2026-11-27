@@ -65,6 +65,25 @@ Fujitsu's PJM rather than Slurm.
   for MPI jobs the per-rank output lands under `output.<jobid>/` in the
   working directory instead — see `fugaku-monitoring-jobs`.
 
+### Working on the login nodes
+
+- `run_command_on_cluster` sessions **drop on commands that run more than
+  a few minutes** ("could not communicate with process"). The remote process
+  usually keeps running, but its foreground output is lost. Start anything
+  long (builds, large `tar`/`rsync`, `du` surveys) as
+  `nohup … > ~/agent/<name>.txt 2>&1 < /dev/null &` and follow the log with
+  `fs_tail`.
+- Successive calls can land on **different x86 login hosts** (fn01sv01,
+  fn01sv02, …). `ps`/`pgrep` on one host cannot see a process started on
+  another, so use log files, not process listings, as the progress signal.
+- A full `du` over a large project tree can run for most of an hour.
+  Survey per directory, in the background, and prefer `accountd -E` for
+  totals.
+- There are two kinds of login node. The x86 nodes (RHEL 8, internet,
+  `pjsub`, cross compilers) are where everything is done. `arm1` is
+  aarch64 but runs glibc 2.17, has no internet and no `pjsub`. It is not a
+  native-build host for the site's RHEL 8 software.
+
 ### Getting help
 
 Point users at RIKEN R-CCS's Fugaku support desk; this plugin cites no

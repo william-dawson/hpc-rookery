@@ -103,6 +103,13 @@ hpc_mcp/                The unified server entry points; importing this
 plugins/hpc/            The base Codex plugin: .mcp.json and only the
                         shared hpc-facilities discovery skill.
 plugins/hpc-<slug>/     Generated skill-only Codex plugin for one facility.
+pi/                    The Pi harness target: an extension that registers
+                        the MCP servers and contributes skill packs per the
+                        user's /hpc selection; root package.json is its
+                        Pi-package manifest.
+opencode/              The OpenCode harness target: a plugin that registers
+                        the MCP servers and contributes the skill packs
+                        named in its plugin options; see opencode/README.md.
 templates/skills/       Shared per-workflow skill templates (the mechanics
                         every facility has identically) — not per-facility.
 scripts/                render_facility_tables.py (facility table codegen),
@@ -120,6 +127,7 @@ These integrations have been exercised against their real scheduler.
 
 | slug | facility | scheduler | description |
 |---|---|---|---|
+| `crux` | Crux (ALCF) | pbs | Argonne ALCF Crux: 256-node HPE Cray EX AMD Rome CPU system, PBS Professional with sbank accounting, mandatory project and filesystems directives; reached over a multiplexed SSH connection the user authenticates once with a one-time passcode. |
 | `fugaku` | Fugaku | pjm | 158,976-node A64FX (Arm SVE) system, Fujitsu PJM scheduler, no GPUs; a project group is mandatory on every job. |
 | `hokusai` | HOKUSAI BigWaterfall2 (HBW2) | slurm | CPU-first Slurm cluster (312-node MPC, large-memory, H100 GPU subsystems); a project account is mandatory on every job. |
 | `miyabi` | Miyabi (JCAHPC) | pbs | JCAHPC CPU/GH200 system with PBS Professional, full-GPU and MIG queues; reached over a multiplexed SSH connection the user authenticates once with a one-time code. |

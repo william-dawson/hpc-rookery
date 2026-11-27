@@ -226,6 +226,18 @@ Compiler suites:
 - **LLVM/Clang** — `module load LLVM/llvmorg-*`, MPI-wrapped as
   `mpiclang`/`mpiclang++`/`mpiflang`.
 
+Performance tools ship with the Technical Computing Suite. Measurement runs
+on a compute node with `fipp` (sampling survey of the whole program) or
+`fapp` (hardware counters for a source-marked region); the matching
+`fipppx` and `fapppx` format the results afterwards on a login node, and
+only those two cross-tools exist there. `fapp` counter data can be turned
+into an Excel workbook, found under `misc/cpupa/` in the toolchain
+directory, but the depth of that report is set by how many times you rerun
+the program with different `-Hevent` sets — up to seventeen. Generic `perf`
+also works inside jobs. See the `fugaku-build` skill's profiling section for the
+flags and for the build and job conditions that silently invalidate a
+measurement.
+
 **Cross-compilation is mandatory unless you build on a compute node.**
 Compute nodes are A64FX/Arm; ordinary login nodes are Intel x86, so a plain
 `gcc`/`clang` invoked on a login node targets the *login node's* CPU, not

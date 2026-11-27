@@ -45,6 +45,9 @@ live-validated.
   home-directory root. `~/agent/` is the agent's visible scratch area —
   `~/agent/jobs` already holds every submitted script — and the home
   root stays the user's own.
+- Create a requested `spec.directory` with `fs_mkdir` **before** submission.
+  Schedulers enter that directory before the script body and `pre_launch`
+  runs, so a `mkdir` in `pre_launch` is too late.
 - Don't guess facility-specific details not covered by the notes above —
   use `search_docs(facility="octopus", query=...)` on the `hpc-docs`
   server. It searches a bundled guide, not a live site — never invent a URL

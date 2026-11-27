@@ -5,22 +5,77 @@
   "verification": {
     "source": "Migrated from IreneAgent's offline behavioral-equivalence port",
     "hub_port_live_revalidated": false,
-    "note": "No live TGCC access was available. Refresh ccc_mpinfo, ccc_compuse, QoS, modules, and storage policy before marking this port live-tested."
+    "note": "No live TGCC access was available. Refresh ccc_mpinfo, ccc_compuse, QoS, modules, and storage policy before marking this port live-tested.",
+    "enriched_from": "BigDFT-Agents' irene_mcp (2026-10-30): subsystem hardware, compilers, application inventory, portal/support pointers and the operational notes were merged in from that port, which carried substantially more site detail than this one. Still not live-revalidated."
   },
   "scheduler": {
     "type": "TGCC Bridge over Slurm",
     "script_directive": "#MSUB",
     "submit": "ccc_msub",
     "launcher": "ccc_mprun",
-    "required": ["partition (-q)", "project (-A)", "filesystems (-m)"]
+    "required": [
+      "partition (-q)",
+      "project (-A)",
+      "filesystems (-m)"
+    ]
   },
   "partitions": [
-    {"name": "rome", "default": true, "nodes": 2286, "cores_per_node": 128, "memory_per_node_gib": 228, "gpu": false, "role": "regular CPU and MPI production"},
-    {"name": "xlarge", "default": false, "nodes": 5, "cores_per_node": 112, "memory_per_node_tib": 3, "gpus_per_node": 1, "gpu_type": "NVIDIA P100", "single_node_jobs": true, "role": "large shared-memory work"},
-    {"name": "v100", "default": false, "nodes": 32, "cores_per_node": 40, "memory_per_node_gib": 175, "gpus_per_node": 4, "gpu_type": "NVIDIA V100"},
-    {"name": "v100l", "default": false, "nodes": 30, "cores_per_node": 36, "memory_per_node_gib": 355, "gpus_per_node": 1, "gpu_type": "NVIDIA V100"},
-    {"name": "v100l-os", "default": false, "nodes": 30, "cores_per_node": 36, "gpus_per_node": 1, "gpu_type": "NVIDIA V100", "note": "OpenStack/OS partition recorded by the source port"},
-    {"name": "v100xl", "default": false, "nodes": 2, "cores_per_node": 72, "memory_per_node_tib": 2.9, "gpus_per_node": 1, "gpu_type": "NVIDIA V100"}
+    {
+      "name": "rome",
+      "default": true,
+      "nodes": 2286,
+      "cores_per_node": 128,
+      "memory_per_node_gib": 228,
+      "gpu": false,
+      "role": "regular CPU and MPI production"
+    },
+    {
+      "name": "xlarge",
+      "default": false,
+      "nodes": 5,
+      "cores_per_node": 112,
+      "memory_per_node_tib": 3,
+      "gpus_per_node": 1,
+      "gpu_type": "NVIDIA P100",
+      "single_node_jobs": true,
+      "role": "large shared-memory work"
+    },
+    {
+      "name": "v100",
+      "default": false,
+      "nodes": 32,
+      "cores_per_node": 40,
+      "memory_per_node_gib": 175,
+      "gpus_per_node": 4,
+      "gpu_type": "NVIDIA V100"
+    },
+    {
+      "name": "v100l",
+      "default": false,
+      "nodes": 30,
+      "cores_per_node": 36,
+      "memory_per_node_gib": 355,
+      "gpus_per_node": 1,
+      "gpu_type": "NVIDIA V100"
+    },
+    {
+      "name": "v100l-os",
+      "default": false,
+      "nodes": 30,
+      "cores_per_node": 36,
+      "gpus_per_node": 1,
+      "gpu_type": "NVIDIA V100",
+      "note": "OpenStack/OS partition recorded by the source port"
+    },
+    {
+      "name": "v100xl",
+      "default": false,
+      "nodes": 2,
+      "cores_per_node": 72,
+      "memory_per_node_tib": 2.9,
+      "gpus_per_node": 1,
+      "gpu_type": "NVIDIA V100"
+    }
   ],
   "qos": {
     "normal": "normal production QoS",
@@ -38,12 +93,119 @@
     "purge_preview_command": "ccc_will_purge"
   },
   "modules": {
-    "site": ["ccc", "datadir/own", "dfldatadir/own"],
-    "mpi": ["mpi/openmpi", "mpi/intelmpi", "mpi/wi4mpi"],
-    "gpu": ["nvhpc"],
-    "numerical": ["mkl", "scalapack", "fftw3/gnu", "fftw3/mkl"],
+    "site": [
+      "ccc",
+      "datadir/own",
+      "dfldatadir/own"
+    ],
+    "mpi": [
+      "mpi/openmpi",
+      "mpi/intelmpi",
+      "mpi/wi4mpi"
+    ],
+    "gpu": [
+      "nvhpc"
+    ],
+    "numerical": [
+      "mkl",
+      "scalapack",
+      "fftw3/gnu",
+      "fftw3/mkl"
+    ],
     "note": "Versions change; query module avail live."
   },
   "containers": "pcocc images launched in jobs with ccc_mprun -C <image> -- <command>",
-  "polling_policy": "Do not use watch on scheduler commands; keep aggregate scheduler queries to roughly one or two per minute."
+  "polling_policy": "Do not use watch on scheduler commands; keep aggregate scheduler queries to roughly one or two per minute.",
+  "subsystems": {
+    "Rome": {
+      "name": "Regular compute nodes",
+      "partition": "rome",
+      "nodes": 2286,
+      "cpu": "2 x 64-core AMD Rome @ 2.6 GHz (AVX2)",
+      "cores_per_node": 128,
+      "total_cores": 292608,
+      "memory_per_node_gib": 228,
+      "memory_per_core_gib": 1.8,
+      "role": "Primary CPU/MPI production partition"
+    },
+    "xlarge": {
+      "name": "Large-memory nodes",
+      "partition": "xlarge",
+      "nodes": 5,
+      "cpu": "4 x 28-core Intel Skylake @ 2.1 GHz",
+      "cores_per_node": 112,
+      "total_cores": 560,
+      "gpu": "1 x NVIDIA Pascal P100 per node",
+      "memory_per_node_tib": 3,
+      "memory_per_core_gib": 27,
+      "local_io": "2 x 1 TB HDD + 1.6 TB NVMe SSD per node",
+      "role": "Single-node large shared-memory jobs"
+    },
+    "V100": {
+      "name": "GPU nodes",
+      "partition": "v100",
+      "nodes": 32,
+      "cpu": "2 x 20-core Intel Cascade Lake @ 2.1 GHz (AVX512)",
+      "cores_per_node": 40,
+      "gpu": "4 x NVIDIA Tesla V100 per node",
+      "total_gpus": 128,
+      "memory_per_node_gib": 175,
+      "memory_per_core_gib": 4.4,
+      "role": "GPU computing and AI"
+    },
+    "V100l": {
+      "name": "GPU nodes with larger memory per GPU",
+      "partition": "v100l",
+      "nodes": 30,
+      "cpu": "2 x 18-core Intel Cascade Lake @ 2.6 GHz (AVX512)",
+      "cores_per_node": 36,
+      "gpu": "1 x NVIDIA Tesla V100 per node",
+      "total_gpus": 30,
+      "memory_per_node_gib": 355,
+      "memory_per_core_gib": 9.9,
+      "role": "GPU computing and AI"
+    },
+    "V100xl": {
+      "name": "Large-memory GPU nodes",
+      "partition": "v100xl",
+      "nodes": 2,
+      "cpu": "4 x 18-core Intel Cascade Lake @ 2.6 GHz (AVX512)",
+      "cores_per_node": 72,
+      "gpu": "1 x NVIDIA Tesla V100 per node",
+      "memory_per_node_tib": 2.9,
+      "memory_per_core_gib": 40,
+      "role": "Large-memory GPU jobs"
+    }
+  },
+  "compilers": {
+    "intel": "Intel C/C++/Fortran compilers, MKL, and related toolchain modules",
+    "gnu": "GNU gcc/g++/gfortran compilers",
+    "nvhpc": "nvc, nvc++, nvfortran, nvcc for NVIDIA GPU programming",
+    "mpi_wrappers": "mpicc, mpic++, mpif77, mpif90; default MPI implementation is loaded at connection time"
+  },
+  "applications": [
+    "abinit",
+    "gaussian",
+    "openfoam",
+    "matlab",
+    "paraview",
+    "visit",
+    "alphafold",
+    "myQLM",
+    "Pulser",
+    "Perceval"
+  ],
+  "login_host": "Configured by site-specific TGCC access documentation; use an SSH alias such as 'irene'",
+  "portal": "https://www-tgcc.ccc.cea.fr/",
+  "support": "TGCC Hotline; contact details are in internal project documentation.",
+  "notes": [
+    "Irene is CPU-first in practice: the Rome partition has 2,286 regular CPU nodes and is the default target for normal MPI/CPU work.",
+    "Bridge is the user-facing batch interface. Submit scripts use #MSUB directives and ccc_msub; parallel work is launched with ccc_mprun.",
+    "The -q partition option and -A project option are mandatory for job submission.",
+    "On Irene, job submissions must declare filesystems with -m; without it, compute nodes cannot use scratch, work, or store.",
+    "The default job wall time is 7200 seconds if -T is omitted, but accurate wall time improves backfill scheduling.",
+    "For GPU partitions, GPUs are allocated indirectly by reserving enough CPU cores per task: roughly CpN/GpN cores per GPU.",
+    "Do not run heavy work on login nodes; use ccc_mprun -K or -s for interactive allocations, or submit a batch job.",
+    "Avoid high-frequency scheduler polling; the TGCC docs recommend an aggregate rate of only 1-2 scheduler queries per minute and prohibit watch on scheduler commands."
+  ]
 }

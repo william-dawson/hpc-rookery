@@ -16,6 +16,11 @@
       "description": "Facility-specific HPC workflow skills for cell2026 (Shinobu Lab). Install the hpc base plugin first for MCP tools."
     },
     {
+      "name": "hpc-crux",
+      "source": "./plugins/hpc-crux",
+      "description": "Facility-specific HPC workflow skills for Crux (ALCF). Install the hpc base plugin first for MCP tools."
+    },
+    {
       "name": "hpc-fugaku",
       "source": "./plugins/hpc-fugaku",
       "description": "Facility-specific HPC workflow skills for Fugaku. Install the hpc base plugin first for MCP tools."

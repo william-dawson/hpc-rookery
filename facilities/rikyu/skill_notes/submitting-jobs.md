@@ -53,6 +53,79 @@ attaching to a running job with `srun --overlap --jobid <id>` for
 diagnostics like `nvidia-smi`; the failure is specifically MPI rank
 bootstrap.)
 
+## Profiling MPI GPU binaries: profile one rank under `mpirun -n 1`
+
+An MPI-linked binary invoked directly under `nsys`/`ncu` fails at
+`MPI_Init` (or otherwise yields an invalid profile). Make the profiler
+the top-level command under a one-rank `mpirun`:
+
+```sh
+export NSYS_DISABLE_SYMBOL_DOWNLOAD=1
+mpirun -n 1 nsys profile --trace=cuda --sample=none --cpuctxsw=none \
+  --force-overwrite true -o profile ./binary < input
+nsys stats --report cuda_gpu_kern_sum --force-export true profile.nsys-rep
+```
+
+Measured facts (RIKYU HPCX/PRTE stack, 2026-09-03 and 2026-09-08):
+
+- Dropping `--sample=none --cpuctxsw=none`, or tracing `mpi`/`nvtx`/`osrt`,
+  hangs the launch: the job sits at 0% GPU utilization with
+  `mpirun`/`prterun`/`nsys` alive but no target process and an
+  `nsys-launcher` in `<defunct>` state. CPU sampling needs perf-event
+  permissions these compute nodes don't grant. Not a timeout — it never
+  resolves itself.
+- `NSYS_DISABLE_SYMBOL_DOWNLOAD=1` must be exported on its own line:
+  compute nodes have no outbound internet, and the symbol-download attempt
+  otherwise blocks at "Generating ... qdstrm" until walltime kills the job
+  — the profiled run itself already completed successfully at that point.
+- For `ncu`, filter by kernel name (`ncu -k regex:<substring>
+  --launch-count N --set full --clock-control none -f -o rep ./binary`),
+  not NVTX ranges — ranges compiled out of the binary make ncu silently
+  profile nothing (`==WARNING== No kernels were profiled`, no report
+  written). And don't quote `--set full`'s `Duration` as a kernel time —
+  replay plus instrumentation inflate it (measured >9x on a ~1.9 ms
+  kernel); take absolute times from `nsys`'s `cuda_gpu_kern_sum` instead.
+- A single-GPU profiling run doesn't need the per-rank GPU-binding
+  wrapper: export `CUDA_VISIBLE_DEVICES=0` and keep the profiler as the
+  top-level command under `mpirun -n 1`, not wrapped a layer deeper.
+
+## NCCL / GPU collectives — quick fixes
+
+Launch every NCCL or GPU-MPI job with ranks NUMA-bound — NCCL pairs each
+GPU with its own NIC from rank affinity data:
+
+```sh
+mpirun -n <np> --bind-to numa --map-by numa --mca fcoll individual ./app
+```
+
+- **NCCL collective is seconds instead of ~sub-ms, result is correct:**
+  ranks are unbound or `--bind-to core`. NCCL mispairs GPU↔NIC; the
+  collective silently runs ~60x slow on one shared rail. Fix: `--bind-to
+  numa --map-by numa`.
+- **`"Duplicate GPU detected"` / `ncclInvalidUsage` from
+  `ncclCommInitRank`:** more than one rank per GPU in one communicator
+  (MPS or not). On NCCL ≥ 2.30, enable multi-rank-per-GPU — verified
+  working at 2 ranks/GPU on RIKYU (NCCL 2.31.2 via
+  `nvhpc-hpcx-cuda13/26.9`):
+
+  ```sh
+  export NCCL_MULTI_RANK_GPU_ENABLE=1   # NCCL >= 2.30, off by default
+  export NCCL_MAX_CTAS=4                # cap collective SM use (defaults fit ~2 ranks/GPU; retune for more)
+  export NCCL_NVLS_ENABLE=0             # NVLS is unavailable to duplicate-GPU ranks
+  ```
+
+  If it hangs (SM residency deadlock): `NCCL_NET_GDR_LEVEL=LOC` —
+  diagnostics only, costs performance. On NCCL ≤ 2.29 use the fallback:
+  one communicator per GPU — reduce co-tenants into that rank, collective
+  over one rank per GPU, broadcast back.
+- **Inter-node CUDA sends die with "cannot find remote protocol … from
+  cuda/GPU" / `ucp_ep_create failed`:** a per-rank `UCX_NET_DEVICES=mlx5_<i>:1`
+  is set (a GB200 tuning-guide recipe). Unset it; NUMA binding covers NCCL's
+  NIC selection.
+
+MPI-IO, MPS-launch, GPU-slot and `processes_per_node` gotchas: see the MPI
+launch section above.
+
 ## RIKYU conventions
 
 - **Time limits**: max 96h regardless of GPU count; confirm the current

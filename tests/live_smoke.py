@@ -45,6 +45,9 @@ JOB_DEFAULTS = {
     # cell2026 --job runs this Slurm job and a second GE GPU job below, so
     # both scheduler paths and the local ID registry are exercised live.
     "cell2026": {"queue_name": "beta", "duration": 300},
+    # Crux: PBS; the debug queue exists for exactly this (1-4 nodes, up to
+    # 2 h, one running job per user) and the account stays user-specific.
+    "crux": {"queue_name": "debug", "duration": 600},
     # ROQUO: one GPU on the default aarch64 partition. --gres=gpu:1 is the
     # "qtr" node plan, the smallest allocation the machine grants. The
     # account stays user-specific: ROQUO does not reject a job without one,

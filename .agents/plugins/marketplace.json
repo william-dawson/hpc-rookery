@@ -33,6 +33,18 @@
       "category": "Productivity"
     },
     {
+      "name": "hpc-crux",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-crux"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "hpc-fugaku",
       "source": {
         "source": "local",

@@ -273,18 +273,16 @@ class SlurmBackend(SchedulerBackend):
         if attr.reservation_id:
             lines.append(f"#SBATCH --reservation={attr.reservation_id}")
         if spec.directory:
-            # Slurm's --chdir is not shell-evaluated, so a literal "~/foo"
-            # would create a directory named "~" instead of resolving to
-            # home. norm_path strips it the same way fs_* tool paths do
-            # (submission's CWD is already $HOME, so the relative form
-            # resolves correctly).
+            # Slurm directives are not shell-evaluated.  norm_path turns
+            # home shorthands into a relative path because submission starts
+            # in $HOME, avoiding a literal tilde or dollar sign here.
             lines.append(f"#SBATCH --chdir={norm_path(spec.directory)}")
         if spec.stdin_path:
-            lines.append(f"#SBATCH --input={spec.stdin_path}")
+            lines.append(f"#SBATCH --input={norm_path(spec.stdin_path)}")
         if spec.stdout_path:
-            lines.append(f"#SBATCH --output={spec.stdout_path}")
+            lines.append(f"#SBATCH --output={norm_path(spec.stdout_path)}")
         if spec.stderr_path:
-            lines.append(f"#SBATCH --error={spec.stderr_path}")
+            lines.append(f"#SBATCH --error={norm_path(spec.stderr_path)}")
         for key, val in attr.custom_attributes.items():
             lines.append(f"#SBATCH --{key}={val}")
         return lines
