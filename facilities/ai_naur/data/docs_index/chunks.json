@@ -1,0 +1,74 @@
+[
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > What the machine is",
+    "url": "",
+    "text": "naur is a single Arm (aarch64) host running Ubuntu 24.04 on NVIDIA's kernel\nwith 64 KiB memory pages. You reach it over SSH (the `ai-Naur` alias); the\nlogin shell and the jobs run on the same host.\n\n- CPU: 72 Arm Neoverse-V2 cores in one socket, one thread per core.\n- Memory: about 744 GiB.\n- GPU: one NVIDIA GB300 with roughly 251 GiB of GPU memory, compute\n  capability 10.3, driver 595.\n\nBecause the host is aarch64, programs compiled on an x86 machine do not run\nhere. Build on naur itself, and expect some prebuilt Python wheels or\nbinaries to assume 4 KiB pages or x86.",
+    "id": 0
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Slurm on naur",
+    "url": "",
+    "text": "naur is a compute node in a small Slurm cluster (version 23.11) whose\ncontroller is a different host. The cluster has four partitions, each\nholding exactly one machine of the same name: `naur` (the default), `prado`,\n`shannon` and `backus`. This facility covers naur only, so every job goes to\nthe `naur` partition; the other three are different computers with different\nCPUs, GPUs and home directories. They still show up in `get_resources` and\n`get_drained_nodes`, because those list the whole cluster.\n\nThe `naur` partition has no time limit.",
+    "id": 1
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Slurm on naur > CPUs",
+    "url": "",
+    "text": "Cores are allocated per job and enforced: a job that asks for 4 CPUs sees 4\ncores. Several jobs can run side by side until the 72 cores are used up, so\nask only for what the job will use.",
+    "id": 2
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Slurm on naur > Memory — never request it",
+    "url": "",
+    "text": "The node is registered in Slurm with a memory size of 1 MiB, and memory is\nnot a scheduled resource. Any realistic `--mem` value is refused at submit\nwith \"Requested node configuration is not available\". Leave memory out of\nthe job description. Jobs share the node's ~744 GiB with no per-job limit,\nso a job that overuses memory can hurt the others; size the work yourself.",
+    "id": 3
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Slurm on naur > Requesting the GPU",
+    "url": "",
+    "text": "The single GPU is a Slurm generic resource (`gpu:1`). Request it with\n`--gres=gpu:1` (`--gpus=1` is also accepted).\n\n- Only one job holds the GPU at a time. A second GPU job waits with reason\n  `Resources` until the first one ends. Asking for two GPUs is refused at\n  submit.\n- GPU access is enforced through a device cgroup. A job that did not request\n  the GPU cannot use it: `nvidia-smi` inside such a job reports that no\n  devices were found. If GPU code fails to find a device, the first thing to\n  check is whether the job asked for the GPU.",
+    "id": 4
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Slurm on naur > No accounting",
+    "url": "",
+    "text": "The Slurm configuration points at an accounting database, but that database\ndoes not answer, so `sacct` and `sacctmgr` fail with a connection error.\nIn practice:\n\n- There is no project or account to set; leave `--account` out.\n- A job's status is available from `squeue` while it is queued or running\n  and from `scontrol show job` for about five minutes after it ends. After\n  that the output files are the only record.\n- `get_projects` and the allocation tools are unsupported here.",
+    "id": 5
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Storage",
+    "url": "",
+    "text": "Home is `/data1/<group>/<lab>/<user>`, which is a link into `/work1`, a local\nNVMe filesystem on naur of about 1.8 TB. No quota is enforced and nothing is\npurged automatically. There is no separate scratch or parallel filesystem,\nand the home directory is local to naur — it is not the same directory as\non the other machines of the cluster. Keep agent-created files under\n`~/agent/` and runs under `~/agent/work/<run>/`.",
+    "id": 6
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Software > Modules",
+    "url": "",
+    "text": "environment-modules (Tcl) is available in login shells and in batch jobs\nsubmitted through the agent. Unlike some sibling machines, the useful module\ndirectories are already on the default module path, so no `module use` is\nneeded:\n\n- `cuda-13.2` — the system CUDA toolkit in `/usr/local/cuda-13.2`\n  (sets `CUDA_PATH`, adds `nvcc` to `PATH`).\n- `nvhpc/26.9` — the NVIDIA HPC SDK: `nvc`, `nvc++`, `nvfortran`, the SDK's\n  own CUDA 13.3, math libraries, and an Open MPI 5 build.\n- Variants of the SDK module: `nvhpc-nompi/26.9`, `nvhpc-hpcx/26.9`,\n  `nvhpc-hpcx-cuda13/26.9`, `nvhpc-hpcx-cuda13-openmpi4/26.9`,\n  `nvhpc-hpcx-cuda13-openmpi5/26.9`, `nvhpc-byo-compiler/26.9`. The SDK\n  modules conflict with each other; load one.\n\nWithout a module loaded, `nvcc`, `nvc` and `mpirun` are not on `PATH`.",
+    "id": 7
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Software > Compilers and MPI",
+    "url": "",
+    "text": "- System GCC and gfortran 13.3 are always available.\n- NVIDIA compilers come from `nvhpc/26.9`; they target Neoverse-V2 by\n  default.\n- There is no system-wide MPI. `mpirun`/`mpicc` appear after loading an\n  `nvhpc` module (Open MPI 5 with the plain `nvhpc` module). Slurm's `srun`\n  offers `pmi2` and `pmix`. With one node, MPI is only useful for\n  shared-memory ranks.",
+    "id": 8
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Software > Python and containers",
+    "url": "",
+    "text": "- Python is the system `python3` (3.12). Use a venv under `~/agent/work/`\n  for extra packages rather than `pip install --user`.\n- There is no Singularity or Apptainer, so the agent's container option does\n  not work here. A `docker` binary exists, but ordinary users are not\n  allowed to talk to its daemon.",
+    "id": 9
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Software > What is not installed",
+    "url": "",
+    "text": "GROMACS is not installed on naur (it is on the sibling hpz workstation, as\nan x86 build that cannot be copied over). Application software has to be\nbuilt here for aarch64.",
+    "id": 10
+  },
+  {
+    "breadcrumb": "ai-Naur (Naur GB300 node) guide > Common failures",
+    "url": "",
+    "text": "| Symptom | Cause | Fix |\n|---|---|---|\n| `Requested node configuration is not available` at submit | a memory request, more than one GPU, more than 72 CPUs, or more than one node | drop the memory request; ask for at most `gpu:1`, 72 CPUs, one node |\n| `No devices found` / CUDA cannot find a GPU inside a job | the job did not request the GPU | add the GPU request (`gpus=1`) |\n| GPU job pends with reason `Resources` | another job holds the GPU | wait, or run on CPU |\n| CPU job pends with reason `Resources` | other jobs hold the cores | lower the CPU request or wait |\n| `nvcc`/`nvc`/`mpirun: command not found` | no module loaded | `module load cuda-13.2` or `module load nvhpc/26.9` |\n| `Exec format error` or `cannot execute binary file` | an x86 binary was copied to this Arm host | rebuild on naur |\n| `sacct`/`sacctmgr` report a refused connection | the accounting database is not in service | use `squeue`/`scontrol`, and the output files |\n| job status says \"not found\" a while after it finished | no accounting; scontrol forgets finished jobs after ~5 minutes | read the job's output files instead |",
+    "id": 11
+  }
+]

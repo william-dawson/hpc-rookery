@@ -1,0 +1,7 @@
+{
+  "slug": "ai-naur",
+  "display_name": "ai-Naur (Naur GB300 node)",
+  "scheduler": "slurm",
+  "description": "One aarch64 Ubuntu node (72 Neoverse-V2 cores, ~744 GiB) with a single NVIDIA GB300 GPU (~251 GiB) requested as a Slurm GRES (--gres=gpu:1) on its own 'naur' partition; no usable accounting and no --mem requests; NVIDIA HPC SDK 26.9 and CUDA 13.2 via environment modules.",
+  "live_validated": true
+}

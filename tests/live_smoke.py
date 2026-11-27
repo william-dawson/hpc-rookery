@@ -50,6 +50,9 @@ JOB_DEFAULTS = {
     # ai-hpz: one-node workstation Slurm, single debug partition, no
     # accounting; the GPU is a GRES, so request one to exercise it.
     "ai-hpz": {"queue_name": "debug", "duration": 300, "gpus": 1},
+    # ai-naur: one aarch64 GB300 node on its own partition of a small
+    # no-accounting Slurm; the GPU is a cgroup-enforced GRES, so request it.
+    "ai-naur": {"queue_name": "naur", "duration": 300, "gpus": 1},
 }
 
 CELL2026_GE_JOB = {"queue_name": "all.q", "duration": 300, "gpus": 1}

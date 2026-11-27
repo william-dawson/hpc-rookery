@@ -1,0 +1,69 @@
+{
+  "cluster": "naur",
+  "site": "ai-Naur node",
+  "architecture": "aarch64",
+  "os": "Ubuntu 24.04 LTS (NVIDIA kernel, 64 KiB pages)",
+  "verification": {
+    "source": "Read live over SSH (scontrol, sinfo, lscpu, nvidia-smi, module avail) and test jobs on 2026-11-27"
+  },
+  "hardware": {
+    "nodes": 1,
+    "cpu": "Arm Neoverse-V2, 1 socket x 72 cores x 1 thread",
+    "slurm_cpus": 72,
+    "memory_mib": 761436,
+    "slurm_real_memory_mib": 1,
+    "gpu": {
+      "model": "NVIDIA GB300",
+      "count": 1,
+      "memory_mib": 256703,
+      "compute_capability": "10.3",
+      "driver": "595.99.02",
+      "managed_by_slurm": true,
+      "gres": "gpu:1"
+    }
+  },
+  "scheduler": {
+    "type": "Slurm",
+    "version": "23.11.4",
+    "controller": "prado (a separate host; naur is a compute node that also accepts logins)",
+    "accounting": false,
+    "accounting_note": "slurm.conf names slurmdbd, but the database refuses connections, so sacct and sacctmgr fail. Treat the machine as having no accounting.",
+    "account_required_in_spec": false,
+    "gpu_request": "--gres=gpu:1 (or --gpus=1); gpu:2 or more is refused at submit",
+    "memory_request": "unsupported — the node is registered with RealMemory=1 MiB, so any real --mem value is refused at submit; memory is not allocated or limited per job",
+    "select": "cons_tres, CR_CORE (cores are allocated per job; memory is not)",
+    "history": "No sacct. A finished job stays visible to scontrol for about five minutes (MinJobAge=300).",
+    "gpu_isolation": "enforced — cgroup ConstrainDevices=yes, so a job without a GPU request cannot see the GPU",
+    "cpu_isolation": "enforced — task/cgroup + task/affinity confine a job to its allocated cores"
+  },
+  "partitions": [
+    {
+      "name": "naur",
+      "default": true,
+      "nodes": 1,
+      "cpus": 72,
+      "gpus": 1,
+      "max_time": "UNLIMITED",
+      "gres": "gpu:1"
+    }
+  ],
+  "other_partitions_in_same_slurm": "prado, shannon and backus are separate hosts in the same Slurm cluster. They are not part of this facility; jobs submitted here must use the naur partition.",
+  "storage": {
+    "home": "/data1/<group>/<lab>/<user>, a symlink into /work1 (local NVMe on naur, ~1.8 TB, no quota)",
+    "agent_work": "~/agent/work",
+    "node_local_scratch": "home is itself local to naur; there is no separate shared or parallel filesystem"
+  },
+  "software": {
+    "modules": {
+      "system": "environment-modules (Tcl); /opt/modulefiles and /opt/nvidia/hpc_sdk/modulefiles are on the default MODULEPATH",
+      "cuda": "cuda-13.2 (sets CUDA_PATH=/usr/local/cuda-13.2)",
+      "nvhpc": "nvhpc/26.9, nvhpc-nompi/26.9, nvhpc-hpcx/26.9, nvhpc-hpcx-cuda13/26.9, nvhpc-hpcx-cuda13-openmpi4/26.9, nvhpc-hpcx-cuda13-openmpi5/26.9, nvhpc-byo-compiler/26.9"
+    },
+    "cuda": "13.2 at /usr/local/cuda (also 13.1); the HPC SDK bundles its own CUDA 13.3. nvcc is not on PATH until a module is loaded.",
+    "compilers": "system GCC/gfortran 13.3; nvc/nvc++/nvfortran from the nvhpc modules",
+    "mpi": "no system MPI; mpirun/mpicc come from the nvhpc modules. srun supports pmi2 and pmix (v5).",
+    "python": "/usr/bin/python3 (3.12)",
+    "gromacs": "not installed",
+    "containers": "no Singularity/Apptainer; a docker binary exists but ordinary users cannot reach its daemon"
+  }
+}

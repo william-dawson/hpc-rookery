@@ -1,0 +1,15 @@
+{
+  "name": "hpc-ai-naur",
+  "description": "Facility-specific HPC workflow skills for ai-Naur (Naur GB300 node). Install the hpc base plugin first for MCP tools.",
+  "version": "0.1.0",
+  "author": {
+    "name": "William Dawson",
+    "email": "william.dawson@riken.jp"
+  },
+  "repository": "https://github.com/william-dawson/hpc-rookery",
+  "keywords": [
+    "hpc",
+    "ai-naur",
+    "slurm"
+  ]
+}

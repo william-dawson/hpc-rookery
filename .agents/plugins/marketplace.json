@@ -33,6 +33,18 @@
       "category": "Productivity"
     },
     {
+      "name": "hpc-ai-naur",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hpc-ai-naur"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "hpc-cell2026",
       "source": {
         "source": "local",

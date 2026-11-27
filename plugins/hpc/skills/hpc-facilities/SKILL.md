@@ -34,6 +34,7 @@ These integrations have been exercised against their real scheduler.
 | slug | facility | scheduler | description |
 |---|---|---|---|
 | `ai-hpz` | ai-hpz (hpz workstation) | slurm | Single-node Ubuntu workstation with its own no-accounting Slurm (one debug partition, 24 CPUs, ~187 GiB) and one Quadro RTX 5000 requested as a Slurm GRES (--gres=gpu:1); GROMACS 2026 (CUDA) and NVIDIA HPC SDK 24.5 installed. |
+| `ai-naur` | ai-Naur (Naur GB300 node) | slurm | One aarch64 Ubuntu node (72 Neoverse-V2 cores, ~744 GiB) with a single NVIDIA GB300 GPU (~251 GiB) requested as a Slurm GRES (--gres=gpu:1) on its own 'naur' partition; no usable accounting and no --mem requests; NVIDIA HPC SDK 26.9 and CUDA 13.2 via environment modules. |
 | `crux` | Crux (ALCF) | pbs | Argonne ALCF Crux: 256-node HPE Cray EX AMD Rome CPU system, PBS Professional with sbank accounting, mandatory project and filesystems directives; reached over a multiplexed SSH connection the user authenticates once with a one-time passcode. |
 | `fugaku` | Fugaku | pjm | 158,976-node A64FX (Arm SVE) system, Fujitsu PJM scheduler, no GPUs; a project group is mandatory on every job. |
 | `hokusai` | HOKUSAI BigWaterfall2 (HBW2) | slurm | CPU-first Slurm cluster (312-node MPC, large-memory, H100 GPU subsystems); a project account is mandatory on every job. |

@@ -16,6 +16,11 @@
       "description": "Facility-specific HPC workflow skills for ai-hpz (hpz workstation). Install the hpc base plugin first for MCP tools."
     },
     {
+      "name": "hpc-ai-naur",
+      "source": "./plugins/hpc-ai-naur",
+      "description": "Facility-specific HPC workflow skills for ai-Naur (Naur GB300 node). Install the hpc base plugin first for MCP tools."
+    },
+    {
       "name": "hpc-cell2026",
       "source": "./plugins/hpc-cell2026",
       "description": "Facility-specific HPC workflow skills for cell2026 (Shinobu Lab). Install the hpc base plugin first for MCP tools."
