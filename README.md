@@ -2,10 +2,10 @@
 
 HPC Rookery is a small shared plugin plus optional facility skill packs for
 working with multiple supercomputers from AI coding agents such as Codex,
-Claude Code, Pi, OpenCode, etc. From your own computer, an AI coding agent
-can connect to a supported facility, inspect and transfer files, compile
-software, submit and monitor batch jobs, and search a guide written for
-that machine.
+Claude Code, Hermes, Pi, OpenCode, VS Code (GitHub Copilot Chat), etc. From
+your own computer, an AI coding agent can connect to a supported facility,
+inspect and transfer files, compile software, submit and monitor batch jobs,
+and search a guide written for that machine.
 
 https://github.com/user-attachments/assets/770e1f11-01c7-48f3-8c89-70efc3722e95
 
@@ -35,6 +35,14 @@ before adding the plugins.
 Install the shared `hpc` plugin first, then choose the facility skill packs
 for the machines you use. Each pack is named `hpc-<slug>` and adds skills
 without starting extra MCP servers. You can add more packs later.
+
+**Using a fork?** A facility does not have to be merged here to be usable.
+Many live in forks, and a fork that has repointed its plugins at itself (see
+[Working from a fork](PORTING.md#0b-working-from-a-fork-the-common-case))
+installs the same way: replace `william-dawson/hpc-rookery` with the fork's
+`owner/hpc-rookery` (and `main` with its branch) in the commands below. A
+fork that has not repointed would still run this repository's server, which
+does not know its facilities.
 
 ### Codex
 
@@ -301,7 +309,9 @@ To add a machine:
   porting guide `PORTING.md`, add X to this repository.”
 
 The coding agent will make all the design decisions and implement all the
-cluster specific code. It adds exactly one `facilities/<name>/` directory:
+cluster specific code. It adds exactly one `facilities/<name>/` directory
+(in a fork, plus one separate commit that repoints the plugins at the
+fork):
 the machine's facts, a guide written in its own words, the code that
 teaches the shared scheduler backend that machine's dialect, and the skill
 notes that turn hard-won operational knowledge — which mpi launcher
@@ -311,6 +321,16 @@ something the agent knows before it makes the mistake.
 Most handwritten machine behavior stays in that facility directory. Shared
 generated tables, skills, and conformance tests make the result visible and
 check it against the same interface as every existing facility.
+
+### Fork first, upstream if you like
+
+Most ports start in a fork, because you usually need the machine working now
+rather than after review, and some facilities (a single lab's workstation, a
+site with its own rules) are better kept in the fork for good. Both are
+fine. [`PORTING.md`](PORTING.md#0b-working-from-a-fork-the-common-case) has
+the one extra step a fork needs — repointing the plugins so they run the
+fork's server — and explains how to keep that step in its own commit, so the
+facility commit can still be cherry-picked into a pull request here.
 
 ### Tool surface: the IRI Facility API
 
@@ -331,6 +351,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/python tests/notebook_client.py         # offline, notebook client/cache over MCP
 .venv/bin/python tests/live_smoke.py              # read-only, needs ssh
 .venv/bin/python tests/live_smoke.py --job rikyu  # + submits a real job
+.venv/bin/python tests/live_smoke.py --job roquo --free  # + a real job on a free tier
 ```
 
 Some files are generated from each cluster's `facility.json` and
