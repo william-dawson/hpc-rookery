@@ -98,13 +98,38 @@ ranks — an MPI program launched with `srun` will hang or fail to start. Load
 the MPI module, then launch with `mpirun` (OpenMPI) instead:
 `module load system/genoa mpi/mpich-x86_64 && mpirun -np <n> ./a.out`.
 
-This is also why most work here should **stay on a single node**: `mpirun`
-without PMI needs its own hostfile/SSH-based remote launch for multi-node
-jobs, which isn't set up on this cluster. Set `resources.node_count: 1` and
-scale with `processes_per_node` unless you've separately confirmed a
-multi-node `mpirun` launch works. (`srun` itself is still fine for
+Multi-node `mpirun` works too, but it takes a hostfile that you write from
+the allocation (see "Multi-node MPI on fx700" below). On a single node,
+`mpirun` needs no hostfile. (`srun` itself is still fine for
 non-MPI/single-process work and interactive `srun --pty` sessions — the PMI
 gap only affects MPI rank bootstrap.)
+
+## Multi-node MPI on fx700
+
+Verified on fx700 with 2, 4 and 8 nodes (OpenMPI `mpirun` inside a
+batch job, no PMI, no SSH setup of your own). The launch is the single-node
+one plus a hostfile, and `--map-by ppr:<ranks per node>:node:PE=<cores per
+rank>` in place of `numa:`:
+
+```bash
+module load system/fx700 FJSVstclanga
+nodes=$SLURM_JOB_NUM_NODES
+scontrol show hostnames $SLURM_JOB_NODELIST | awk '{print $1 " slots=4 max_slots=4"}' > hosts.txt
+export OMP_NUM_THREADS=12 OMP_DYNAMIC=FALSE OMP_PROC_BIND=close OMP_PLACES=cores
+mpirun -np $((4*nodes)) --hostfile hosts.txt --report-bindings \
+       --bind-to core --map-by ppr:4:node:PE=12 ./app
+```
+
+Request the nodes with `resources.node_count: N`, `processes_per_node: 4`
+and `exclusive_node_use: true`, and check `--report-bindings` (one rank per
+CMG on every node) in the job output. A quick `mpirun ... hostname` job on 2 nodes
+is a cheap way to confirm the launch before a long run.
+
+Memory per node is small (A64FX has 32 GB of HBM2): a job that dies with
+`exited on signal 9 (Killed)` or exit status 137 after a short time did not
+fit on its nodes, so add nodes before looking for another cause. (For
+example, a 256-molecule water system with BigDFT is killed on 1 and 2 nodes
+and runs on 4.)
 
 ## fx700 (A64FX) affinity: bind processes to CMGs
 
@@ -167,8 +192,8 @@ pattern above; prefer the latter when the workload allows it.
   Linux. A binary or wheel built for Rocky may need a rebuild for ng-dgx.
 - **Network**: only InfiniBand partitions suit tightly-coupled multi-node
   MPI. Ethernet-only partitions have high latency; prefer single-node work
-  there. Multi-node MPI is doubly discouraged here since it also needs a
-  manual `mpirun` hostfile/SSH setup (see "MPI launch" above) — default to
+  there. Multi-node MPI needs the hostfile launch from "Multi-node MPI on fx700"
+  above (verified on fx700 only); on the Ethernet-only partitions, default to
   single-node.
 - **Scripts land in `~/agent/jobs/`** — `fs_view(facility="rccs-cloud",
   path=...)` them to debug exactly what ran.
