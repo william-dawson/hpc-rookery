@@ -1,0 +1,7 @@
+{
+  "slug": "roquo",
+  "display_name": "ROQUO (RIKEN R-CCS)",
+  "scheduler": "slurm",
+  "description": "GB200 GPU system with aarch64 compute nodes and x86_64 login/work nodes, Slurm with accounting, --gres=gpu:N and QOS-tiered wall times.",
+  "live_validated": false
+}
