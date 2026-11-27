@@ -7,12 +7,18 @@ every onboarded supercomputer through one process. It assumes **no other
 context**: you do not need to have seen any other facility's directory to
 follow this. Read it in full before writing any code.
 
-**Porting a facility means opening a PR against this repo, not creating a
-new repo.** There is one shared MCP-owning base plugin and one skill-only
-plugin per facility, all generated from this repository. Your PR adds one
-`facilities/<slug>/` directory; nothing else in this repo should need to
-change (the server auto-discovers every facility directory, and generators
-create its skill pack — see §5 and §7).
+**Porting a facility means adding a `facilities/<slug>/` directory to this
+repo, not creating a new repo.** There is one shared MCP-owning base plugin
+and one skill-only plugin per facility, all generated from this repository.
+Your port adds one `facilities/<slug>/` directory; nothing else in this repo
+should need to change (the server auto-discovers every facility directory,
+and generators create its skill pack — see §5 and §7).
+
+**Most ports start life in a fork**, because a contributor often needs the
+facility working immediately rather than after upstream review. A fork
+needs one extra, separate commit so its plugins load the fork's code
+instead of upstream's — see §0b before you start. Upstream PRs stay
+welcome; §0b says how to keep that path open.
 
 ## 0. The mental model
 
@@ -98,7 +104,89 @@ there when your facility establishes a behavior others should also honor —
 that's how a genuinely important change propagates, without collapsing
 readable per-facility code into a shared abstraction.
 
-## 1. Learn the target machine before writing anything
+## 0b. Working from a fork (the common case)
+
+Every installed plugin launches the server with
+`uv tool run --from git+https://github.com/<owner>/hpc-rookery.git@<ref>`.
+In a fresh fork that URL still names `william-dawson`, so installing the
+fork's plugin quietly runs **upstream's** server — which has never heard of
+your new facility. The facility directory is correct and the tools still
+say "unknown facility". Forking therefore needs a **repoint**: every place
+that names the repo to run must name the fork instead.
+
+Do it as **one separate commit**, made before (or after) the facility
+commit and never mixed with it:
+
+```bash
+OWNER=your-github-user          # and REF=main below, unless the fork ships another branch
+
+# 1. Edit SOURCES only. Discover them rather than trusting a list: every
+#    tracked file that names upstream, except the generated output
+#    (plugins/hpc-<slug>/ and plugins/hpc/mcp.json plus the plugins/hpc
+#    manifests, which step 2 regenerates) and the two docs that describe
+#    this repo's identity.
+git grep -lz 'william-dawson/hpc-rookery' \
+  -- . ':!AGENTS.md' ':!PORTING.md' ':!plugins/hpc-*' \
+     ':!plugins/hpc/mcp.json' ':!plugins/hpc/plugin.json' \
+     ':!plugins/hpc/.claude-plugin' ':!plugins/hpc/.codex-plugin' \
+| xargs -0 perl -pi -e "s{william-dawson/hpc-rookery}{$OWNER/hpc-rookery}g"
+
+# If the fork's branch isn't `main`, also change the `@main` ref in the
+# git+https URLs of: scripts/render_plugins.py, plugins/hpc/.mcp.json,
+# pi/extension.ts (PKG_REF), opencode/src/index.ts (PKG_REF_DEFAULT).
+
+# 2. Regenerate everything derived from those sources.
+python scripts/render_skills.py
+python scripts/render_plugins.py
+
+# 3. Verify. Both must hold: nothing still names upstream (anywhere, generated
+#    output included), and a second render changes nothing.
+git grep -n 'william-dawson/hpc-rookery' -- ':!AGENTS.md' ':!PORTING.md'   # prints nothing
+python scripts/render_skills.py && python scripts/render_plugins.py && git status --short   # no new changes
+```
+
+The file list below is what step 1 should find today; if it finds a file
+that isn't here, repoint it too and add it to the table in the same PR.
+
+**Three mistakes the first fork made, now guarded against:**
+
+1. **Hand-editing generated files.** The first fork edited
+   `plugins/hpc-<slug>/skills/*/SKILL.md` directly. `render_skills.py`
+   overwrites those on its next run (silently undoing the repoint), and CI's
+   generated-output check fails. The URL lives in
+   `templates/skills/{configuring,reproducing}.md.tmpl`; edit the template and
+   regenerate. Same for `plugins/hpc/mcp.json` and every manifest's
+   `repository` field: they come from `scripts/render_plugins.py`. The only
+   hand-maintained copy under `plugins/` is `plugins/hpc/.mcp.json`.
+2. **Missing the other harness targets.** `pi/extension.ts` (`PKG_REF`) and
+   `opencode/src/index.ts` (`PKG_REF_DEFAULT`) each carry their own copy of
+   the install URL, independent of the Claude/Codex plugin. Repoint only the
+   plugin and Pi/OpenCode users still get upstream's server.
+3. **Missing `tests/notebook_client.py`.** It asserts the pinned URL, so a
+   repoint that skips it leaves a failing test. This is also why the step-3
+   grep covers the whole tree rather than a list: it finds any copy added
+   after this guide was written.
+
+Why each file is in the list:
+
+| File | What breaks if it's left on upstream |
+|---|---|
+| `plugins/hpc/.mcp.json` | **The one that matters.** Hand-maintained (not generated); this is the file harnesses actually load, so the fork's server is never started. |
+| `scripts/render_plugins.py` | Generates `plugins/hpc/mcp.json` and every plugin manifest's `repository`; the next render silently reverts a hand edit of those. |
+| `templates/skills/{configuring,reproducing}.md.tmpl` | Every facility's `hpc-doctor`/ingest commands and notebook `pinned_params(...)` would run upstream code. A hand edit of the generated `SKILL.md` is overwritten (and CI's generated-output check fails). |
+| `pi/extension.ts`, `opencode/src/index.ts` | The Pi and OpenCode targets carry their own copy of the install URL. |
+| `tests/notebook_client.py` | Asserts the pinned URL. |
+| `package.json`, `pyproject.toml`, READMEs | Package metadata and install commands point users at the fork. |
+
+`AGENTS.md` is deliberately excluded: it records which repository this is.
+
+**Keeping the upstream path open.** Because the repoint is its own commit,
+contributing back is `git cherry-pick <facility commit>` onto a branch from
+upstream `main` — the repoint stays behind. Pulling upstream into the fork
+later only conflicts on the lines above; re-run the block rather than
+resolving by hand. Never open an upstream PR from a branch that contains the
+repoint commit.
+
 
 Answer these from the machine's real, official documentation (see §2 for
 how to turn that into your guide) and, if you have SSH access already, by
@@ -759,7 +847,9 @@ hard way here:
 
 The tool surface, the skill *mechanics* (templates), the codegen scripts,
 README, and IRI checklist are already generic — a facility PR does **not**
-touch:
+touch the list below. (The one exception is a fork's repoint commit, §0b,
+which edits the templates, `render_plugins.py` and README precisely to
+change the repository URL — and which never goes into an upstream PR.)
 
 - `hpc_mcp/hpc_server.py` / `docs_server.py` / `doctor.py` — already handle
   every registered facility generically.
