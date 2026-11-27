@@ -47,6 +47,22 @@
         "max_wall_time": "3-00:00:00",
         "max_wall_time_with_qos_long": "30-00:00:00",
         "default_wall_time": "01:00:00"
+      },
+      {
+        "name": "roquo_share",
+        "description": "Free GPU development tier, aarch64: every job gets one fixed set of 1 MIG slice (1g.23gb, about 1/7 of a GB200 and ~20 GiB of GPU memory), 6 cores and 32 GiB of host memory on one node. For building, debugging, small tests and training exercises - not for production or performance measurement. Two nodes (qr08n08-qr08n09) share 48 sets, up to 24 jobs per node. No billing points; the personal account is valid here. One job per user (running and pending together); no job arrays, --dependency or --exclusive. Verified live 2026-11-27 (scontrol show partition roquo_share) against the manual's share-partition page, last updated 2026-11-12.",
+        "nodes": 2,
+        "architecture": "aarch64",
+        "gpus_per_node": "24 MIG slices per node (48 in total); each job gets exactly one",
+        "gpu_slice": "MIG 1g.23gb",
+        "cpu_cores_per_job": 6,
+        "memory_per_job_gib": 32,
+        "max_nodes_per_job": 1,
+        "max_wall_time": "08:00:00",
+        "default_wall_time": "01:00:00",
+        "max_jobs_per_user": 1,
+        "billing": "None - billing points are not used",
+        "eligibility": "Not stated in the manual; unverified."
       }
     ],
     "default_partition": "roquo",
@@ -68,7 +84,7 @@
     "nodes_always_explicit": true,
     "account_required": true,
     "account_flag": "--account=<project>",
-    "account_note": "Always set it. It selects both the billing target and the group that owns files the job writes; without it a job falls back to a restrictive default account. It is not a hard rejection, so a job can run and behave oddly instead of failing cleanly. List your accounts with `sacctmgr -nP show assoc user=$USER format=Account` or get_projects. get_projects returns both a billing group and an unchargeable personal account named after the username; only the former can be charged (ROQUO-E202). Billing is by points, and a job is refused up front if the group's balance is short (ROQUO-E201) - roughly 7000 points for a 5-minute single-GPU job and 66 for a 5-minute 2-CPU work job, as measured.",
+    "account_note": "Always set it. It selects both the billing target and the group that owns files the job writes; without it a job falls back to a restrictive default account. It is not a hard rejection, so a job can run and behave oddly instead of failing cleanly. List your accounts with `sacctmgr -nP show assoc user=$USER format=Account` or get_projects. get_projects returns both a billing group and an unchargeable personal account named after the username; only the former can be charged (ROQUO-E202). Billing is by points, and a job is refused up front if the group's balance is short (ROQUO-E201) - roughly 7000 points for a 5-minute single-GPU job and 66 for a 5-minute 2-CPU work job, as measured. The exception is the free roquo_share partition: there the personal account is valid, --account may be omitted (the job then runs under the personal account), and no points are used. Its usage still feeds the chosen account's fair-share, so charging a project there can slightly delay that project's paid jobs.",
     "qos": {
       "note": "Pass as custom_attributes.qos, which renders as #SBATCH --qos=<name>. Allowed-per-partition comes from `scontrol show partition` AllowQos; ceilings from `sacctmgr show qos` MaxWall. Verified live 2026-10-27.",
       "allowed_by_partition": {
@@ -85,6 +101,9 @@
           "long",
           "p4",
           "p5"
+        ],
+        "roquo_share": [
+          "normal"
         ]
       },
       "max_wall": {
@@ -104,8 +123,10 @@
       "silent_trap": "Exceeding a QOS's MaxWall while still inside the partition's MaxTime is accepted by Slurm and then never scheduled: the job parks on QOSMaxWallDurationPerJobLimit, which looks identical to a busy queue. This is any work job over 3 days without --qos=long, and equally any roquo job over its p1/p2/p3 ceiling. submit_job refuses these up front.",
       "partition_max_time": {
         "roquo": "3-00:00:00",
-        "work": "30-00:00:00"
-      }
+        "work": "30-00:00:00",
+        "roquo_share": "08:00:00"
+      },
+      "roquo_share_note": "roquo_share's own QOS (also named roquo_share) caps a user at one job and 08:00:00. The scheduler accepts any --qos there and rewrites it to normal (ROQUO-W301); submit_job refuses anything but normal so a caller does not believe a priority QOS took effect."
     },
     "node_plans": {
       "note": "A GPU request on the roquo partition rounds up to one of three fixed plans. Asking for more than one full node's worth in a single --gres request is rejected with ROQUO-E001; use --gres=gpu:4 with --nodes=N instead.",
@@ -139,7 +160,16 @@
       "ROQUO-E103": "Too much memory requested on work (max 8 GiB per allocated CPU).",
       "ROQUO-W003": "Not an error despite the prefix: ROQUO prints warnings as 'sbatch: error: [ROQUO-Wnnn]'. W003 means the request was rounded up to a node plan (e.g. to the 1/4 slot: 1 GPU / 36 cores / 400000 MB), which is normal. Judge success by sbatch's exit status and whether a job id came back, not by the presence of 'error:' in its output.",
       "ROQUO-E201": "Insufficient billing points for the charging group: 'Not enough billing points (remaining N, this job needs M). Billing group: <project>.' The job is refused and sbatch ends with the unhelpful 'Batch job submission failed: Unspecified error', so read the whole stderr, not just the last line. There is no CLI for the balance - it is in the ROQUO Portal - and the fix is to ask the administrators to add points, or to charge a different project with attributes.account.",
-      "ROQUO-E202": "A job was submitted against a personal account: 'Jobs cannot be submitted with a personal account (<username>).' sacctmgr lists a personal association alongside the real billing group, and it is not chargeable. get_projects marks each entry with chargeable true/false so this is visible before submitting. Use the qc-prj-* billing group."
+      "ROQUO-E202": "A job was submitted against a personal account: 'Jobs cannot be submitted with a personal account (<username>).' sacctmgr lists a personal association alongside the real billing group, and it is not chargeable. get_projects marks each entry with chargeable true/false so this is visible before submitting. Use the qc-prj-* billing group on roquo and work. The personal account is valid only on roquo_share.",
+      "ROQUO-W301": "roquo_share only: --qos was changed to normal (notice). Remove --qos.",
+      "ROQUO-W302": "roquo_share only: the job runs as one set - 1 MIG slice, 6 cores, 32 GiB (notice).",
+      "ROQUO-E301": "roquo_share was given together with other partitions (e.g. -p roquo,roquo_share). Give it alone.",
+      "ROQUO-E302": "roquo_share only: the request is larger than one set (2+ GPUs, 7+ cores, 7+ tasks, more than 32 GiB, or 2+ nodes). Smaller requests are rounded up, not rejected.",
+      "ROQUO-E303": "roquo_share only: --exclusive was given; one node is shared by up to 24 jobs.",
+      "ROQUO-E304": "roquo_share only: a job array with 2+ tasks. --dependency follow-ups are refused too, because they count as a second job.",
+      "ROQUO-E305": "roquo_share only: run time over 8 hours.",
+      "ROQUO-E306": "roquo_share only: partition, GPU, CPU, memory, tasks or QOS changed after submission (scontrol update). Cancel and resubmit; the run time may be changed within 8 hours.",
+      "one-job-per-user": "roquo_share only: a second job fails with 'Job violates accounting/QOS policy (job submit limit, user's size and/or time limits)'. Running and pending jobs count together; resubmit after the first ends."
     },
     "mail_note": "Notifications need both --mail-type (e.g. END,FAIL) and --mail-user set to a full address containing '@'. A bare username silently sends nothing.",
     "output_note": "sbatch messages are bilingual: each line appears in Japanese and then in English. Both lines carry the same ROQUO-nnn code, so match on the code rather than on message text."

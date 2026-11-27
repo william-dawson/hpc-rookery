@@ -5,7 +5,8 @@ by the wrong group — so a notebook that omits it reproduces *something*,
 just not the run the user meant. Treat the project as a parameter of the
 notebook, set once near the top, not a detail buried in one cell.
 
-**Pin the partition too.** `roquo` and `work` are different architectures,
+**Pin the partition too.** `roquo` and `work` are different architectures
+(and `roquo_share` is a free one-MIG-slice tier of the same GPUs as `roquo`),
 so a notebook that relies on the default partition silently becomes
 non-reproducible the day someone changes it. Name it.
 

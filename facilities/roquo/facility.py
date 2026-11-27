@@ -11,6 +11,12 @@ Two things shape this port:
   `--qos=long` is accepted and then never starts. validate_spec() below
   catches all of those at submit time, because "never starts" is
   indistinguishable from "queued" to anyone watching.
+
+A third partition, `roquo_share`, is a free GPU development tier: one MIG
+slice, 6 cores, 32 GiB, 8 hours, one job per user, no billing points. It is
+the one place the personal account is valid (on `roquo` and `work` it is
+refused with ROQUO-E202), so apply_defaults() deliberately does *not* fill
+in the billing group there.
 """
 import os
 from pathlib import Path
@@ -57,7 +63,7 @@ FACILITY = config.register_facility(
 
 #: Partitions that exist. Submitting to anything else is a typo or a stale
 #: script from before the per-rack partitions were withdrawn.
-_PARTITIONS = frozenset({"roquo", "work"})
+_PARTITIONS = frozenset({"roquo", "work", "roquo_share"})
 
 #: Removed 2026-10-13. Worth naming explicitly: an old script fails with a
 #: bare Slurm "invalid partition" that doesn't say what to use instead.
@@ -71,6 +77,10 @@ _REMOVED_RACK_PARTITIONS = frozenset(f"roquo-rack{n:02d}" for n in range(1, 9))
 _PARTITION_QOS = {
     "roquo": frozenset({"normal", "p1", "p2", "p3", "p4", "p5"}),
     "work": frozenset({"normal", "long", "p4", "p5"}),
+    # The scheduler accepts any QOS here and silently rewrites it to
+    # `normal` (ROQUO-W301), so refusing the rest up front is clearer than
+    # letting a caller believe a priority QOS took effect.
+    "roquo_share": frozenset({"normal"}),
 }
 
 #: Per-QOS wall-time ceilings in seconds, from `sacctmgr show qos`
@@ -88,7 +98,17 @@ _QOS_MAX_WALL = {
 #: Each partition's own MaxTime. Slurm rejects a job exceeding this at
 #: submit time with a clear message; exceeding the *QOS* ceiling while
 #: still inside this one is the dangerous case -- see _check_wall_time.
-_PARTITION_MAX_WALL = {"roquo": 3 * 86400, "work": 30 * 86400}
+_PARTITION_MAX_WALL = {"roquo": 3 * 86400, "work": 30 * 86400,
+                       "roquo_share": 8 * 3600}
+
+#: roquo_share hands every job one fixed "set": a single MIG slice
+#: (1g.23gb) with 6 cores and 32 GiB of host memory on one node. Anything
+#: larger is refused by the scheduler with ROQUO-E302; smaller requests are
+#: rounded up to the set, not rejected.
+_SHARE_MAX_GPUS = 1
+_SHARE_MAX_CPUS = 6
+_SHARE_MAX_TASKS = 6
+_SHARE_MAX_GIB = 32
 
 _GPUS_PER_NODE = 4
 _WORK_MAX_CPUS = 192
@@ -122,7 +142,13 @@ class RoquoBackend(SlurmBackend):
         attrs = spec.attributes
         if not attrs.queue_name:
             attrs.queue_name = "roquo"
-        if attrs.account is None:
+        # roquo_share is free and accepts the personal account, which is
+        # what an omitted --account gives you. Filling in the billing group
+        # here would be wrong twice over: nothing is charged, and the
+        # manual says share usage feeds the *account's* fair-share, so
+        # charging the group's account slightly delays that group's paid
+        # jobs. A caller who wants a project can still set one explicitly.
+        if attrs.account is None and attrs.queue_name != "roquo_share":
             attrs.account = _default_account()
 
     def get_projects(self) -> list[dict]:
@@ -143,7 +169,9 @@ class RoquoBackend(SlurmBackend):
             if personal:
                 project["note"] = (
                     "Personal account — cannot be charged. ROQUO refuses a job "
-                    "submitted against it with ROQUO-E202; use a billing group."
+                    "submitted against it on roquo or work with ROQUO-E202; "
+                    "use a billing group there. It is valid only on the free "
+                    "roquo_share partition."
                 )
         return projects
 
@@ -155,6 +183,11 @@ class RoquoBackend(SlurmBackend):
         qos = attrs.custom_attributes.get("qos", "")
         duration = self._duration_seconds(attrs.duration)
 
+        if queue and "," in queue and "roquo_share" in queue.split(","):
+            raise ValueError(
+                "ROQUO-E301: roquo_share cannot be combined with other "
+                f"partitions (got {queue!r}). Give 'roquo_share' alone."
+            )
         if queue in _REMOVED_RACK_PARTITIONS:
             raise ValueError(
                 f"Partition {queue!r} was removed on 2026-10-13. Submit to "
@@ -169,10 +202,52 @@ class RoquoBackend(SlurmBackend):
 
         if queue == "work":
             self._validate_work(spec, gpus, qos, duration)
+        elif queue == "roquo_share":
+            self._validate_share(spec, gpus, qos, duration)
         else:
             self._validate_roquo(spec, gpus, qos, duration)
 
-    # -- per-partition rules, split because the two are different machines --
+    # -- per-partition rules, split because they are different machines --
+
+    def _validate_share(self, spec: JobSpec, gpus: int, qos: str,
+                        duration: int | None) -> None:
+        """roquo_share: one fixed set per job, one job per user, 8 hours.
+
+        "One job per user" (running and pending together) and the ban on
+        arrays and --dependency cannot be checked from a single spec, so
+        the scheduler's own "Job violates accounting/QOS policy" error is
+        the only guard for a second submission; the guide says so.
+        """
+        res = spec.resources
+        tasks = res.process_count or res.processes_per_node * res.node_count
+        cores = (res.cpu_cores_per_process or 1) * tasks
+
+        if res.exclusive_node_use:
+            raise ValueError(
+                "ROQUO-E303: --exclusive is not allowed on roquo_share; one "
+                "node is shared by up to 24 jobs."
+            )
+        too_big = []
+        if gpus > _SHARE_MAX_GPUS:
+            too_big.append(f"{gpus} GPUs (one MIG slice per job)")
+        if res.node_count > 1:
+            too_big.append(f"{res.node_count} nodes (one node)")
+        if tasks > _SHARE_MAX_TASKS:
+            too_big.append(f"{tasks} tasks (at most {_SHARE_MAX_TASKS})")
+        if cores > _SHARE_MAX_CPUS:
+            too_big.append(f"{cores} cores (at most {_SHARE_MAX_CPUS})")
+        if res.memory and _gib(res.memory) > _SHARE_MAX_GIB:
+            too_big.append(f"{_gib(res.memory):.0f} GiB (at most "
+                           f"{_SHARE_MAX_GIB} GiB of host memory)")
+        if too_big:
+            raise ValueError(
+                "ROQUO-E302: roquo_share gives every job one fixed set — 1 "
+                f"MIG slice, {_SHARE_MAX_CPUS} cores, {_SHARE_MAX_GIB} GiB, "
+                "1 node — and refuses anything larger. Requested "
+                + "; ".join(too_big) + ". Smaller requests are fine (they "
+                "round up to one set); for more, use the 'roquo' partition."
+            )
+        self._check_qos_and_wall_time(spec, "roquo_share", qos, duration)
 
     def _validate_roquo(self, spec: JobSpec, gpus: int, qos: str,
                         duration: int | None) -> None:
@@ -261,10 +336,13 @@ class RoquoBackend(SlurmBackend):
 
         partition_cap = _PARTITION_MAX_WALL[partition]
         if duration > partition_cap:
+            limit = (f"{partition_cap // 86400}d" if partition_cap % 86400 == 0
+                     else f"{partition_cap // 3600}h")
+            code = " (ROQUO-E305)" if partition == "roquo_share" else ""
             raise ValueError(
                 f"Wall time {spec.attributes.duration!r} exceeds the "
-                f"{partition!r} partition's own limit of "
-                f"{partition_cap // 86400}d, which Slurm rejects at submit."
+                f"{partition!r} partition's own limit of {limit}, which "
+                f"Slurm rejects at submit{code}."
             )
 
         qos_cap = _QOS_MAX_WALL.get(qos or "normal")

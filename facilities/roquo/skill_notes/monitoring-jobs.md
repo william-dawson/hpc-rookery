@@ -31,9 +31,16 @@ check, and the only fix is to resubmit with the copy-out step added.
 
 Compute nodes are `qrNNnMM` (rack `qr01`–`qr08`, e.g. `qr01n01`); `work`
 nodes are `work01`–`work05`. A node name tells you which partition a job
-actually ran on, which matters because the two have different
+actually ran on, which matters because `roquo` and `work` have different
 architectures — if something behaved oddly, confirming it ran on `qr*` vs
-`work*` is a fast way to catch an architecture mismatch.
+`work*` is a fast way to catch an architecture mismatch. The free
+`roquo_share` jobs run on `qr08n08`–`qr08n09`, which are also `qr*`, so
+check the partition rather than the node name to tell those from paid
+`roquo` jobs.
+
+A job pending on `roquo_share` usually means all 48 slices are busy, or the
+user already has one job there (only one per user, running and pending
+together).
 
 `get_drained_nodes(facility="{{SLUG}}")` reports nodes Slurm has taken out
 of service, which is worth checking before concluding a partition is

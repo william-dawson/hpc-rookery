@@ -6,6 +6,7 @@ moment it's registered — nothing here to update per facility.
 
     .venv/bin/python tests/live_smoke.py                    # read-only, every facility
     .venv/bin/python tests/live_smoke.py --job rikyu        # + submit a real job there
+    .venv/bin/python tests/live_smoke.py --job roquo --free # + a real job on its free tier
     .venv/bin/python tests/live_smoke.py --job hokusai --account rb230090
 
 Needs a working ~/.hpc-agent/<slug>.json and real SSH access for each
@@ -53,6 +54,14 @@ JOB_DEFAULTS = {
 }
 
 CELL2026_GE_JOB = {"queue_name": "all.q", "duration": 300, "gpus": 1}
+
+#: --free: the facility's no-billing tier, for contributors who have an
+#: account but no points. Kept apart from JOB_DEFAULTS so `--job <slug>`
+#: still exercises the paid path. No account on purpose: roquo_share runs
+#: under the personal account, which the paid partitions refuse.
+FREE_TIER_JOBS = {
+    "roquo": {"queue_name": "roquo_share", "gpus": 1, "duration": 300},
+}
 
 
 async def read_only_tier(hpc, docs_hpc) -> list[str]:
@@ -208,7 +217,8 @@ async def job_tier(hpc, slug: str, account: str | None,
     assert "hub-smoke-ok" in out, out
 
 
-async def main(job_facility: str | None, account: str | None) -> None:
+async def main(job_facility: str | None, account: str | None,
+               free: bool = False) -> None:
     # Pass the environment through explicitly. StdioServerParameters(env=None)
     # gives the server subprocess a *minimal* environment, not this process's
     # — so a `FACILITY_X=... python tests/live_smoke.py` override silently
@@ -233,6 +243,15 @@ async def main(job_facility: str | None, account: str | None) -> None:
                     defaults_override=CELL2026_GE_JOB,
                     job_name="hub-smoke-ge",
                 )
+            elif free:
+                assert job_facility in FREE_TIER_JOBS, (
+                    f"{job_facility!r} has no free tier in FREE_TIER_JOBS "
+                    f"(have {sorted(FREE_TIER_JOBS)})")
+                await job_tier(
+                    hpc, job_facility, None,
+                    defaults_override=FREE_TIER_JOBS[job_facility],
+                    job_name="hub-smoke-free",
+                )
             else:
                 await job_tier(hpc, job_facility, account)
         print("\nALL LIVE CHECKS PASSED")
@@ -245,5 +264,10 @@ if __name__ == "__main__":
     parser.add_argument("--account", default=None,
                          help="Project/account to charge for --job (needed where "
                               "the facility requires one and no default is configured).")
+    parser.add_argument("--free", action="store_true",
+                         help="With --job, run the facility's free tier "
+                              "(FREE_TIER_JOBS) instead of the paid default, "
+                              "and charge no account.")
     args = parser.parse_args()
-    asyncio.run(main(args.job, args.account))
+    assert not args.free or args.job, "--free needs --job <facility>"
+    asyncio.run(main(args.job, args.account, args.free))

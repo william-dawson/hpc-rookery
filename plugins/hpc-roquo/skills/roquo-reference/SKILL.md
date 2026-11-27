@@ -52,9 +52,10 @@ and is the authority; say so if the user needs certainty.
 - **Two architectures.** Login and `work` nodes are x86_64; GPU compute
   nodes are aarch64. This explains most "it worked yesterday on the login
   node" reports.
-- **Two partitions**: `roquo` (135 GB200 nodes, 4 GPUs each, 8 racks) and
-  `work` (5 x86_64 CPU-only nodes). The per-rack partitions were removed
-  on 2026-10-13.
+- **Three partitions**: `roquo` (135 GB200 nodes, 4 GPUs each, 8 racks),
+  `work` (5 x86_64 CPU-only nodes) and `roquo_share` (a free development
+  tier: one MIG slice, 6 cores, 32 GiB, 8 hours, one job per user, no
+  billing points). The per-rack partitions were removed on 2026-10-13.
 - **GPU dialect**: `--gres=gpu:N`, per node, N ≤ 4 — not RIKYU's job-total
   `--gpus=N`.
 - **GPU generation**: GB200/Blackwell, compute capability 10.0

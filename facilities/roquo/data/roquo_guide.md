@@ -6,10 +6,20 @@ supercomputer built around NVIDIA GB200 nodes, scheduled by Slurm.
 **Provenance:** written from the operator's online manual, then checked
 against the live system on 2026-10-27. Verified there: SSH, Slurm 26.05.3,
 both partitions and their node counts, the QOS policy, and that a rendered
-script is accepted by `sbatch`. Not verified: a job running to completion —
-the project available for testing had zero billing points. Where the manual
-and the live system disagreed, this follows the live system and says so.
-Quotas remain unverified (the manual marks them TBD), so read those live.
+script is accepted by `sbatch`. Where the manual and the live system
+disagreed, this follows the live system and says so. Quotas remain
+unverified (the manual marks them TBD), so read those live.
+
+**Updated 2026-11-27.** A one-GPU job now runs to completion on `roquo`
+(charged to a billing group) and on `roquo_share` (no account, no points),
+each reading its output back. The `roquo_share` section is from the
+manual's share-partition page (last updated 2026-11-12); its partition
+definition — one node per job, 8-hour limit, 32 GiB, the `roquo_share` QOS
+with one job per user — was confirmed with `scontrol show partition` and
+`sacctmgr show qos`, and `ROQUO-W302` ("No points are charged") appeared on
+a real submission. Not provoked live: the `ROQUO-E301`–`E306` rejections and
+the second-job error, which come from the manual. Eligibility for
+`roquo_share` is not stated anywhere.
 
 ## The one thing to get right first
 
@@ -42,7 +52,7 @@ the exception.
 
 ## Slurm
 
-Two partitions, and they are genuinely different machines:
+Three partitions, and they are genuinely different machines:
 
 - **`roquo`** — the default. 135 GB200 GPU nodes, aarch64, in eight racks
   (`qr01`–`qr08`), nodes named like `qr01n01`. No node-count cap under the
@@ -51,6 +61,11 @@ Two partitions, and they are genuinely different machines:
 - **`work`** — five CPU-only x86_64 nodes (`work01`–`work05`), AMD EPYC
   9655 with 192 logical CPUs and about 1510 GiB usable each. No GPUs. For
   builds, pre/post-processing, workflow servers, and VS Code Remote.
+- **`roquo_share`** — a free GPU development tier: every job gets one MIG
+  slice of a GB200, 6 cores and 32 GiB, for up to 8 hours, and costs no
+  billing points. Two aarch64 nodes shared by up to 24 jobs each. It is for
+  building, debugging and small tests, not production. See "The roquo_share
+  partition" below.
 
 Per-rack partitions `roquo-rack01`–`roquo-rack08` were removed on
 2026-10-13. If you find them in an old script, delete them and use
@@ -58,13 +73,13 @@ Per-rack partitions `roquo-rack01`–`roquo-rack08` were removed on
 to five minutes before spanning racks; `--switches=1@<time>` shortens
 that).
 
-**Always set `--account=<project>`.** It chooses both what gets billed and
-which group owns the files the job writes. Leaving it out doesn't fail the
+**On `roquo` and `work`, always set `--account=<project>`.** It chooses both
+what gets billed and which group owns the files the job writes. Leaving it out doesn't fail the
 job — it falls back to a restrictive default account, which is worse,
 because the job runs and behaves strangely instead of stopping. List what
 you can charge with `sacctmgr -nP show assoc user=$USER format=Account`.
 
-**Always set `--time`.** The default is one hour on both partitions, which
+**Always set `--time`.** The default is one hour on every partition, which
 is rarely what you meant.
 
 Standard `sbatch` / `squeue --me` / `salloc` / `srun` / `scancel` /
@@ -116,6 +131,62 @@ looks exactly like waiting for a busy queue. That's any `work` job over 3
 days without `--qos=long`, and equally any `roquo` job over its `p1`/`p2`/
 `p3` ceiling. Going over the *partition's* MaxTime is the safe case: Slurm
 refuses it at submit with a clear message.
+
+## The roquo_share partition
+
+A free place to try a GPU program before spending points on `roquo`. Each
+GB200 is split into MIG slices, and a job gets exactly one **set**: one
+`1g.23gb` slice (about 1/7 of a GB200's compute and about 20 GiB of GPU
+memory), 6 cores on the same socket, and 32 GiB of host memory, on one node.
+Two nodes (`qr08n08`–`qr08n09`) offer 48 sets between them, up to 24 jobs
+per node. It is the same aarch64 GB200 as `roquo`, so a binary built for
+`roquo` runs unchanged.
+
+Submit with `--partition=roquo_share` and nothing else is needed — you do
+not have to ask for a GPU, CPUs or memory, and without a request you get one
+set. `--gres=gpu:1` (or `--gpus=1`) is also fine and means the same slice.
+Smaller requests round up to the set (`--cpus-per-task=2` becomes 6 cores,
+`--mem=8G` becomes 32 GiB); `ROQUO-W302` just reports the shape.
+
+The rules that differ from `roquo`:
+
+- **No billing points**, and **`--account` may be omitted**: the job then
+  runs under your personal account, which is *refused* on `roquo` and `work`
+  (`ROQUO-E202`) but valid here. A project is allowed too. Either way the
+  usage is recorded in that account's fair-share, so heavy `roquo_share` use
+  can slightly delay the same account's paid `roquo` jobs; prefer the
+  personal account unless you have a reason.
+- **One job per user**, running and pending together, whatever the account.
+  A second submission fails with `Job violates accounting/QOS policy (job
+  submit limit, user's size and/or time limits)`. No job arrays with two or
+  more tasks (`ROQUO-E304`), no `--dependency` follow-ups, and an interactive
+  `srun --pty` counts as the job. `srun` steps *inside* a job are free.
+- **At most 8 hours.** The default is one hour. Over 8 hours is
+  `ROQUO-E305`.
+- **QOS is always `normal`.** Any `--qos` is rewritten to it
+  (`ROQUO-W301`), so `p1`–`p5` do nothing here.
+- **Nothing larger than one set:** 2 or more GPUs, 7 or more cores or tasks,
+  more than 32 GiB, or 2 or more nodes is `ROQUO-E302`. `--exclusive` is
+  `ROQUO-E303`. Don't combine it with other partitions
+  (`-p roquo,roquo_share` is `ROQUO-E301`). You can't `scontrol update` the
+  partition, resources or QOS after submitting (`ROQUO-E306`); cancel and
+  resubmit. The run time can still be changed within 8 hours.
+- **The 32 GiB is host memory** and an overrun is an OOM kill. GPU memory
+  from `cudaMalloc` is separate, but host memory the GPU uses directly
+  (`malloc` with NVHPC `-gpu=mem:unified`, OpenMP offload or stdpar over host
+  memory) counts toward it.
+- **One slice only.** Multi-GPU, NVLink, P2P and multi-GPU NCCL do not work,
+  GPU memory is about 20 GiB (more is an out-of-memory error), and tools that
+  need the whole GPU (changing GPU settings, whole-GPU performance counters)
+  may not work. It runs roughly 1/7 as fast as one GPU on `roquo`, so do not
+  use it for performance measurement.
+- **Scratch is shared.** Use `$SLURM_SCRATCH` (`$TMPDIR` is inside it); it
+  is the node's local NVMe, shared by the jobs on that node with no per-job
+  limit, so a job that fills it stops other users writing. It and anything
+  left in `/tmp` or `/dev/shm` is deleted when the job ends — copy results
+  to `/projects/hps1/<project>` or your home directory.
+- When all 48 sets are busy a job waits (`PENDING`) in normal fair-share
+  order. The manual does not say who may use the partition.
 
 ## The work partition's own rules
 
@@ -249,9 +320,15 @@ by whether the word "error" appears.
 - **A job writes files the rest of the project can't read** — it ran
   without `--account`, so a restrictive default owned the output.
 - **`ROQUO-E202`, "Jobs cannot be submitted with a personal account"** —
-  you charged the account named after your username. `sacctmgr` lists it
-  next to your real billing group, but it cannot be charged. Use the
-  `qc-prj-*` group; `get_projects` marks which entries are chargeable.
+  you charged the account named after your username on `roquo` or `work`.
+  `sacctmgr` lists it next to your real billing group, but it cannot be
+  charged there. Use the `qc-prj-*` group; `get_projects` marks which entries
+  are chargeable. The personal account *is* valid on `roquo_share`.
+- **`roquo_share`: "Job violates accounting/QOS policy (job submit limit …)"**
+  — you already have a job there, running or pending. Only one at a time.
+- **`roquo_share`: `ROQUO-E301`–`E306`** — see "The roquo_share partition"
+  for each; most mean the request is larger than one set (1 slice, 6 cores,
+  32 GiB, 1 node) or longer than 8 hours.
 - **`ROQUO-E201`, "Not enough billing points"** — the charging group is out
   of points. sbatch then ends with the unhelpful `Batch job submission
   failed: Unspecified error`, so read the whole message, not the last line.

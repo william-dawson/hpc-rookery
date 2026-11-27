@@ -20,12 +20,17 @@ The same applies to container images — they must be aarch64.
 
 ## Partitions
 
-Only two, and treat them as separate machines:
+Three, and treat them as separate machines:
 
 | Partition | What it is | Architecture | GPUs |
 |---|---|---|---|
 | `roquo` (default) | 135 GB200 nodes in 8 racks (`qr01`–`qr08`) | aarch64 | 4 per node |
 | `work` | 5 nodes for builds, pre/post-processing, workflow servers | x86_64 | none |
+| `roquo_share` | **free** development tier: one MIG slice per job | aarch64 | 1 slice |
+
+**Tell the user about `roquo_share` before spending points.** For a first
+test, a build-and-debug loop, or anything that fits in one small slice, it
+costs nothing and needs no project. See its section below.
 
 `roquo-rack01` … `roquo-rack08` were removed on 2026-10-13. If a user's
 old script names one, point them at `roquo` plus
@@ -61,7 +66,7 @@ GPU has its own directly attached NIC, so fewer GPUs means less bandwidth.
 
 ## Always set the account, and always set the time
 
-**`attributes.account`.** It picks both the billing target and the group
+On `roquo` and `work`: **`attributes.account`.** It picks both the billing target and the group
 that owns files the job writes. `get_projects` returns two entries and only
 one is usable: the account named after the username is a **personal
 account** and ROQUO refuses jobs charged to it (`ROQUO-E202`). Each entry
@@ -74,8 +79,12 @@ they belong to several and haven't said which, ask: it's a billing
 decision. `ROQUO_ACCOUNT` or `defaults.account` in
 `~/.hpc-agent/roquo.json` fills it in automatically when set.
 
-**`attributes.duration`.** The scheduler default is one hour on both
-partitions, which is rarely what anyone meant.
+`roquo_share` is the exception: leave `attributes.account` unset there (the
+job runs under the personal account, which is valid on that partition only)
+— `submit_job` does not fill the billing group in for it.
+
+**`attributes.duration`.** The scheduler default is one hour on every
+partition, which is rarely what anyone meant.
 
 ## Wall time is capped by QOS — and one failure is silent
 
@@ -100,6 +109,34 @@ the *partition's* MaxTime is the safe case — Slurm refuses it at submit.
 
 This is not only a `work` problem: a `roquo` job asking 2.5 days under
 `p1` (ceiling 2d) parks exactly the same way.
+
+## The `roquo_share` partition's rules
+
+Free, no billing points. Set `attributes.queue_name` to `roquo_share`.
+Every job gets exactly one **set** — one MIG slice (`1g.23gb`, about 1/7 of a
+GB200 and ~20 GiB GPU memory), 6 cores, 32 GiB host memory, one node — and
+you do not have to ask for any of it. `resources.gpus=1` is also fine and
+means the same slice.
+
+- **Do not set `attributes.account`** unless the user wants a project. Unset,
+  it runs under their personal account (refused elsewhere with `ROQUO-E202`,
+  fine here). Usage counts toward that account's fair-share, so charging a
+  project there can slightly delay that project's paid jobs.
+- **At most 8 hours** (default 1) and **only `normal` QOS** — `submit_job`
+  refuses longer runs and any other QOS, because the scheduler would
+  otherwise silently rewrite it.
+- **Nothing bigger than one set**: more than 1 GPU, 6 cores or tasks, 32 GiB,
+  or 1 node is refused by `submit_job` with `ROQUO-E302`. Smaller is fine.
+  `resources.exclusive_node_use` is refused (`ROQUO-E303`).
+- **One job per user, running and pending together.** `submit_job` cannot
+  know about the user's other job, so a second submission comes back as
+  `Job violates accounting/QOS policy (job submit limit …)`. Check
+  `get_job_statuses` first, or wait for the first to end. No job arrays and
+  no `--dependency` follow-ups.
+- **One slice**: multi-GPU, NVLink, P2P and multi-GPU NCCL don't work, and
+  it is roughly 1/7 the speed of one GPU — never use it to measure
+  performance. Host memory the GPU uses directly (unified memory, OpenMP
+  offload) counts toward the 32 GiB.
 
 ## The `work` partition's rules
 
@@ -190,8 +227,9 @@ charging group is out of allocation, sbatch refuses the job, and the last
 line is the unhelpful `Batch job submission failed: Unspecified error` —
 so read the whole stderr. No command reports the balance (it's in the
 Portal), so the useful response is to tell the user their project is out
-of points and offer to charge a different one via `attributes.account`,
-not to retry or to adjust the job.
+of points and offer to charge a different one via `attributes.account` —
+or, if the work fits one MIG slice and 8 hours, to run it free on
+`roquo_share` — not to retry or to adjust the job.
 
 ## Email
 

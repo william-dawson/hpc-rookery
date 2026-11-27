@@ -1052,6 +1052,31 @@ def check_facility(slug: str) -> None:
             ({"cpu_cores_per_process": 8},
              {"queue_name": "work", "duration": "30-00:00:00",
               "custom_attributes": {"qos": "long"}}, "limits a job to 4 CPUs"),
+            # roquo_share: one fixed set (1 MIG slice, 6 cores, 32 GiB, one
+            # node), 8 hours, normal QOS only. E302 is the scheduler's own
+            # code for "larger than one set".
+            ({"gpus": 2}, {"queue_name": "roquo_share", "duration": 3600},
+             "ROQUO-E302"),
+            ({"node_count": 2}, {"queue_name": "roquo_share", "duration": 3600},
+             "ROQUO-E302"),
+            ({"cpu_cores_per_process": 7},
+             {"queue_name": "roquo_share", "duration": 3600}, "ROQUO-E302"),
+            ({"process_count": 7},
+             {"queue_name": "roquo_share", "duration": 3600}, "ROQUO-E302"),
+            ({"memory": 33 * 1024 ** 3},
+             {"queue_name": "roquo_share", "duration": 3600}, "ROQUO-E302"),
+            ({"exclusive_node_use": True},
+             {"queue_name": "roquo_share", "duration": 3600}, "ROQUO-E303"),
+            # Over 8h: the message must say 8h, not "0d", and name E305.
+            ({}, {"queue_name": "roquo_share", "duration": "8:00:01"},
+             "limit of 8h"),
+            ({}, {"queue_name": "roquo_share", "duration": "1-00:00:00"},
+             "ROQUO-E305"),
+            ({}, {"queue_name": "roquo_share", "duration": 3600,
+                  "custom_attributes": {"qos": "p1"}},
+             "not accepted by the 'roquo_share' partition"),
+            ({}, {"queue_name": "roquo,roquo_share", "duration": 3600},
+             "ROQUO-E301"),
         ]
         for resources, attrs, expected in rejected:
             bad = spec(resources, **attrs)
@@ -1085,8 +1110,33 @@ def check_facility(slug: str) -> None:
              {"queue_name": "work", "duration": "30-00:00:00",
               "custom_attributes": {"qos": "long"}}),
             ({"cpu_cores_per_process": 16}, {"queue_name": "work", "duration": 3600}),
+            # roquo_share: the whole set, a smaller request (rounds up), the
+            # full 8 hours, and a bare job with no resources at all.
+            ({"gpus": 1, "cpu_cores_per_process": 6, "memory": 32 * 1024 ** 3},
+             {"queue_name": "roquo_share", "duration": "8:00:00"}),
+            ({"gpus": 1, "cpu_cores_per_process": 2},
+             {"queue_name": "roquo_share", "duration": 3600,
+              "custom_attributes": {"qos": "normal"}}),
+            ({}, {"queue_name": "roquo_share", "duration": 3600}),
         ):
             assert rendered(spec(resources, **attrs)).strip()
+
+        # roquo_share is the one partition where the personal account is
+        # valid, so apply_defaults must NOT fill in the billing group there
+        # (it would also feed that group's fair-share for a free job), while
+        # roquo still gets it. An explicit account is always honored.
+        with patch.dict(os.environ, {"ROQUO_ACCOUNT": "qc-prj-conformance"}):
+            paid = spec({"gpus": 1}, duration=3600)
+            backend.apply_defaults(paid)
+            assert paid.attributes.account == "qc-prj-conformance", paid.attributes
+            free = spec({}, queue_name="roquo_share", duration=3600)
+            backend.apply_defaults(free)
+            assert free.attributes.account is None, free.attributes
+            assert "--account" not in backend.render_script(free)
+            explicit = spec({}, queue_name="roquo_share", duration=3600,
+                            account="qc-prj-other")
+            backend.apply_defaults(explicit)
+            assert explicit.attributes.account == "qc-prj-other"
 
         # get_projects must mark the personal account unchargeable: ROQUO
         # refuses a job charged to it (E202), sacctmgr lists it beside the
@@ -1100,6 +1150,7 @@ def check_facility(slug: str) -> None:
         by_account = {p["account"]: p for p in projects}
         assert by_account["q0000227"]["chargeable"] is False
         assert "E202" in by_account["q0000227"]["note"]
+        assert "roquo_share" in by_account["q0000227"]["note"]
         assert by_account["qc-prj-tup0000"]["chargeable"] is True
         assert "note" not in by_account["qc-prj-tup0000"]
 

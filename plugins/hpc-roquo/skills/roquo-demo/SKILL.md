@@ -111,11 +111,19 @@ to several, ask which to charge rather than picking one. If Step 1's
 `get_projects` fails, that is the SSH check failing; follow the template's
 instruction and switch to `roquo-configuring`.
 
-**A note for Step 2.** `get_resources` shows two partitions, `roquo` and
-`work`, and they are different architectures (aarch64 vs x86_64) rather
-than two sizes of the same thing. Worth saying out loud when presenting
-the table, because it's the single most consequential fact about this
-machine.
+**Offer the free route first.** Billing is by points, and many users have
+none or don't want to spend any on a demo. The `roquo_share` partition runs
+the same demo free: set `queue_name` to `roquo_share`, leave `account`
+unset, and keep it to one GPU. It gives one MIG slice (`nvidia-smi -L` then
+shows `MIG 1g.23gb` rather than a whole GB200) and allows one job per user,
+so check nothing else of theirs is running there. Ask which they prefer;
+the paid `roquo` route above still needs a project from `get_projects`.
+
+**A note for Step 2.** `get_resources` shows three partitions — `roquo`,
+`work` and the free `roquo_share` — and `roquo` and `work` are different
+architectures (aarch64 vs x86_64) rather than two sizes of the same thing.
+Worth saying out loud when presenting the table, because it's the single
+most consequential fact about this machine.
 
 **A note for Step 7.** The script writes to the submission directory by
 default. If the job had written to `$SLURM_SCRATCH`, the output would be

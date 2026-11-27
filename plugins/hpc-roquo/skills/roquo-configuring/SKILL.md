@@ -83,7 +83,10 @@ if the user has a reason.
 `hpc-doctor roquo` checks the SSH connection and that Slurm answers
 (`sinfo --version`). A good first real test is a one-GPU job on the
 `roquo` partition with a short wall time — `nvidia-smi -L` is enough to
-prove the GPU plan landed.
+prove the GPU plan landed. If the user has no billing points (or would
+rather not spend any), run the same test free on `roquo_share` with no
+account; it proves submission and the output path, though it shows a MIG
+slice rather than a whole GPU.
 
 Be aware when interpreting results that **modules only load on compute
 nodes**, so `module avail` over `run_command_on_cluster` (which runs on
