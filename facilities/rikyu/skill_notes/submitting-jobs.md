@@ -89,6 +89,32 @@ Measured facts (RIKYU HPCX/PRTE stack, 2026-09-03 and 2026-09-08):
   wrapper: export `CUDA_VISIBLE_DEVICES=0` and keep the profiler as the
   top-level command under `mpirun -n 1`, not wrapped a layer deeper.
 
+### compute-sanitizer follows the same rule, plus two flags
+
+`compute-sanitizer` is a launcher like `nsys`: put it under `mpirun -n 1`,
+never around `mpirun` and never on its own. Verified 2026-11-28 on an
+HPC-X-linked binary (`nvhpc-hpcx/26.3`):
+
+```sh
+mpirun -n 1 --bind-to none -x LD_LIBRARY_PATH -x OMP_NUM_THREADS \
+  compute-sanitizer --print-limit 5 --report-api-errors no --show-backtrace device \
+  ./binary <args> 2>&1 | head -80
+```
+
+- Run bare (`compute-sanitizer ./binary`), the binary dies in
+  `MPI_Init_thread` ("opal_init:startup:internal-failure") and the tool
+  reports only "Target application terminated before first instrumented
+  API call" — it looks like a sanitizer problem and is a launch problem.
+- Without `--report-api-errors no`, the first screens are filled with
+  `CUDA_ERROR_INVALID_CONTEXT` from UCX probing CUDA during `MPI_Init`
+  (`uct_cuda_copy_md_open`, `ucp_proto_rndv_*`). They are harmless and
+  push the real kernel report past any `head`; the flag keeps the output
+  to device-side memory errors.
+- `--show-backtrace device` keeps each report to the faulting kernel and
+  source line (`file.h:NNN`; a plain `nvc++` Release build was enough to
+  get the line); `--print-limit` stops after the first few identical reports.
+  Use a small input — the run is 10-100x slower than normal.
+
 ## NCCL / GPU collectives — quick fixes
 
 Launch every NCCL or GPU-MPI job with ranks NUMA-bound — NCCL pairs each
